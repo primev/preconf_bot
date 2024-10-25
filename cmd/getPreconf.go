@@ -92,12 +92,12 @@ func main() {
 
 	// Log configuration values (excluding sensitive data)
 	log.Info("Configuration values",
-		"bidderAddress", bidderAddress,
-		"rpcEndpoint", rpcEndpoint,
-		"wsEndpoint", wsEndpoint,
-		"offset", offset,
-		"usePayload", usePayload,
-	)
+    "bidderAddress", bidderAddress,
+    "rpcEndpoint", maskEndpoint(rpcEndpoint),
+    "wsEndpoint", maskEndpoint(wsEndpoint),
+    "offset", offset,
+    "usePayload", usePayload,
+)
 
 	authAcct, err := bb.AuthenticateAddress(privateKeyHex)
 	if err != nil {
@@ -154,22 +154,18 @@ func main() {
 			wsClient, sub = reconnectWSClient(wsEndpoint, headers)
 			continue
 		case header := <-headers:
-			log.Info("new block generated", "block", header.Number)
-
 			amount := new(big.Int).SetInt64(1e15)
 			var signedTx *types.Transaction
 			var blockNumber uint64
 			if ethTransfer == "true" {
 				signedTx, blockNumber, err = ee.SelfETHTransfer(wsClient, authAcct, amount, offset)
-				println("eth transfer here")
 			} else if blob == "true" {
 				// Execute Blob Transaction
 				signedTx, blockNumber, err = ee.ExecuteBlobTransaction(wsClient, authAcct, NUM_BLOBS, offset)
-				println("blob here?")
 			}
 
 			if signedTx == nil {
-				fmt.Println("Transaction was not signed or created.")
+				log.Error("Transaction was not signed or created.")
 			} else {
 				// Proceed with the rest of your logic
 			}
@@ -179,9 +175,11 @@ func main() {
 				log.Error("failed to execute transaction", "err", err)
 			}
 
-			log.Info("Transaction fee values",
-				"txHash", signedTx.Hash().String(),
-				"blockNumber", blockNumber)
+			log.Info("new block received",
+			"blockNumber", header.Number,
+			"timestamp", header.Time,
+			"hash", header.Hash().String(),
+		)
 
 
 			if usePayload {
@@ -203,6 +201,14 @@ func main() {
 			}
 		}
 	}
+}
+
+
+func maskEndpoint(rpcEndpoint string) string {
+	if len(rpcEndpoint) > 5 {
+		return rpcEndpoint[:5] + "*****"
+	}
+	return "*****"
 }
 
 func connectRPCClientWithRetries(rpcEndpoint string, maxRetries int, timeout time.Duration) *ethclient.Client {

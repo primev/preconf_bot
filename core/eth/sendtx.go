@@ -145,8 +145,6 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 		Sidecar:    sideCar,
 	})
 
-	println(" check BlobTx", tx)
-
 	// Sign the transaction with the authenticated account's private key
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
 	if err != nil {
