@@ -233,14 +233,14 @@ func connectRPCClientWithRetries(rpcEndpoint string, maxRetries int, timeout tim
 }
 
 func connectWSClient(wsEndpoint string) (*ethclient.Client, error) {
-	wsClient, err := bb.NewGethClient(wsEndpoint)
-	if err != nil {
-		log.Warn("failed to connect to websocket client", "err", err)
-		// sleep for 10 seconds
-		time.Sleep(10 * time.Second)
-		return connectWSClient(wsEndpoint)
-	}
-	return wsClient, nil
+    for {
+        wsClient, err := bb.NewGethClient(wsEndpoint)
+        if err == nil {
+            return wsClient, nil
+        }
+        log.Warn("failed to connect to websocket client", "err", err)
+        time.Sleep(10 * time.Second)
+    }
 }
 
 func reconnectWSClient(wsEndpoint string, headers chan *types.Header) (*ethclient.Client, ethereum.Subscription) {
