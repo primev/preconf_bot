@@ -167,7 +167,7 @@ func main() {
 			if signedTx == nil {
 				log.Error("Transaction was not signed or created.")
 			} else {
-				// Proceed with the rest of your logic
+				log.Info("Transaction sent successfully")
 			}
 
 			// Check for errors before using signedTx
