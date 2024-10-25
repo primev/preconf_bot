@@ -3,7 +3,7 @@ package eth
 import (
 	"bytes"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 
@@ -70,7 +70,7 @@ func SendBundle(RPCURL string, signedTx *types.Transaction, blkNum uint64) (stri
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Error("an error occurred", "err", err)
 		return "", err
