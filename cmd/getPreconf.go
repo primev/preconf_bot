@@ -168,8 +168,6 @@ func main() {
 
 	timer := time.NewTimer(24 * 14 * time.Hour)
 
-	// Seed the random number generator
-	rand.Seed(time.Now().UnixNano())
 
 	for {
 		select {
