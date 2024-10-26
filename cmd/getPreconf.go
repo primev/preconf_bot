@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
@@ -17,7 +18,6 @@ import (
 	"github.com/joho/godotenv"
 	ee "github.com/primev/preconf_blob_bidder/core/eth"
 	bb "github.com/primev/preconf_blob_bidder/core/mevcommit"
-	"golang.org/x/exp/rand"
 )
 
 var NUM_BLOBS = 6
@@ -81,6 +81,28 @@ func main() {
 		}
 	}
 
+	// Read bidAmount from environment variable
+	bidAmountEnv := os.Getenv("BID_AMOUNT")
+	var bidAmount float64 = 0.001 // Default bid amount
+	if bidAmountEnv != "" {
+		var err error
+		bidAmount, err = parseFloatEnvVar("BID_AMOUNT", bidAmountEnv)
+		if err != nil {
+			log.Crit("Invalid BID_AMOUNT value", "err", err)
+		}
+	}
+
+	// Read stdDevPercentage from environment variable
+	stdDevPercentageEnv := os.Getenv("BID_AMOUNT_STD_DEV_PERCENTAGE")
+	var stdDevPercentage float64 = 100.0 // Default std percent is 100%
+	if stdDevPercentageEnv != "" {
+		var err error
+		stdDevPercentage, err = parseFloatEnvVar("BID_AMOUNT_STD_DEV_PERCENTAGE", stdDevPercentageEnv)
+		if err != nil {
+			log.Crit("Invalid BID_AMOUNT_STD_DEV_PERCENTAGE value", "err", err)
+		}
+	}
+
 	// these variables are not required
 	ethTransfer := os.Getenv("ETH_TRANSFER")
 	blob := os.Getenv("BLOB")
@@ -92,12 +114,14 @@ func main() {
 
 	// Log configuration values (excluding sensitive data)
 	log.Info("Configuration values",
-    "bidderAddress", bidderAddress,
-    "rpcEndpoint", maskEndpoint(rpcEndpoint),
-    "wsEndpoint", maskEndpoint(wsEndpoint),
-    "offset", offset,
-    "usePayload", usePayload,
-)
+		"bidderAddress", bidderAddress,
+		"rpcEndpoint", maskEndpoint(rpcEndpoint),
+		"wsEndpoint", maskEndpoint(wsEndpoint),
+		"offset", offset,
+		"usePayload", usePayload,
+		"bidAmount", bidAmount,
+		"stdDevPercentage", stdDevPercentage,
+	)
 
 	authAcct, err := bb.AuthenticateAddress(privateKeyHex)
 	if err != nil {
@@ -144,6 +168,9 @@ func main() {
 
 	timer := time.NewTimer(24 * 14 * time.Hour)
 
+	// Seed the random number generator
+	rand.Seed(time.Now().UnixNano())
+
 	for {
 		select {
 		case <-timer.C:
@@ -154,10 +181,10 @@ func main() {
 			wsClient, sub = reconnectWSClient(wsEndpoint, headers)
 			continue
 		case header := <-headers:
-			amount := new(big.Int).SetInt64(1e15)
 			var signedTx *types.Transaction
 			var blockNumber uint64
 			if ethTransfer == "true" {
+				amount := new(big.Int).SetInt64(1e15)
 				signedTx, blockNumber, err = ee.SelfETHTransfer(wsClient, authAcct, amount, offset)
 			} else if blob == "true" {
 				// Execute Blob Transaction
@@ -176,22 +203,32 @@ func main() {
 			}
 
 			log.Info("new block received",
-			"blockNumber", header.Number,
-			"timestamp", header.Time,
-			"hash", header.Hash().String(),
-		)
+				"blockNumber", header.Number,
+				"timestamp", header.Time,
+				"hash", header.Hash().String(),
+			)
 
+			// Compute standard deviation in ETH
+			stdDev := bidAmount * stdDevPercentage / 100.0
+
+			// Generate random amount with normal distribution
+			randomEthAmount := rand.NormFloat64()*stdDev + bidAmount
+
+			// Ensure the randomEthAmount is positive
+			if randomEthAmount <= 0 {
+				randomEthAmount = bidAmount // fallback to bidAmount
+			}
 
 			if usePayload {
 				// If use-payload is true, send the transaction payload to mev-commit. Don't send bundle
-				sendPreconfBid(bidderClient, signedTx, int64(blockNumber))
+				sendPreconfBid(bidderClient, signedTx, int64(blockNumber), randomEthAmount)
 			} else {
 				// send as a flashbots bundle and send the preconf bid with the transaction hash
 				_, err = ee.SendBundle(rpcEndpoint, signedTx, blockNumber)
 				if err != nil {
 					log.Error("Failed to send transaction", "rpcEndpoint", rpcEndpoint, "error", err)
 				}
-				sendPreconfBid(bidderClient, signedTx.Hash().String(), int64(blockNumber))
+				sendPreconfBid(bidderClient, signedTx.Hash().String(), int64(blockNumber), randomEthAmount)
 			}
 
 			// handle ExecuteBlob error
@@ -202,7 +239,6 @@ func main() {
 		}
 	}
 }
-
 
 func maskEndpoint(rpcEndpoint string) string {
 	if len(rpcEndpoint) > 5 {
@@ -233,14 +269,14 @@ func connectRPCClientWithRetries(rpcEndpoint string, maxRetries int, timeout tim
 }
 
 func connectWSClient(wsEndpoint string) (*ethclient.Client, error) {
-    for {
-        wsClient, err := bb.NewGethClient(wsEndpoint)
-        if err == nil {
-            return wsClient, nil
-        }
-        log.Warn("failed to connect to websocket client", "err", err)
-        time.Sleep(10 * time.Second)
-    }
+	for {
+		wsClient, err := bb.NewGethClient(wsEndpoint)
+		if err == nil {
+			return wsClient, nil
+		}
+		log.Warn("failed to connect to websocket client", "err", err)
+		time.Sleep(10 * time.Second)
+	}
 }
 
 func reconnectWSClient(wsEndpoint string, headers chan *types.Header) (*ethclient.Client, ethereum.Subscription) {
@@ -264,27 +300,25 @@ func reconnectWSClient(wsEndpoint string, headers chan *types.Header) (*ethclien
 	return nil, nil
 }
 
-func sendPreconfBid(bidderClient *bb.Bidder, input interface{}, blockNumber int64) {
-	// Seed the random number generator
-	rand.Seed(uint64(time.Now().UnixNano()))
-
-	// Generate a random number
-	minAmount := 0.0002
-	maxAmount := 0.001
-	randomEthAmount := minAmount + rand.Float64()*(maxAmount-minAmount)
-
-	// Convert the random ETH amount to wei (1 ETH = 10^18 wei)
-	randomWeiAmount := int64(randomEthAmount * 1e18)
-
-	// Convert the amount to a string for the bidder
-	amount := fmt.Sprintf("%d", randomWeiAmount)
-
+func sendPreconfBid(bidderClient *bb.Bidder, input interface{}, blockNumber int64, randomEthAmount float64) {
 	// Get current time in milliseconds
 	currentTime := time.Now().UnixMilli()
 
 	// Define bid decay start and end
 	decayStart := currentTime
 	decayEnd := currentTime + int64(time.Duration(36*time.Second).Milliseconds()) // bid decay is 36 seconds (2 blocks)
+
+	// Convert the random ETH amount to wei (1 ETH = 10^18 wei)
+	bigEthAmount := big.NewFloat(randomEthAmount)
+	weiPerEth := big.NewFloat(1e18)
+	bigWeiAmount := new(big.Float).Mul(bigEthAmount, weiPerEth)
+
+	// Convert big.Float to big.Int
+	randomWeiAmount := new(big.Int)
+	bigWeiAmount.Int(randomWeiAmount)
+
+	// Convert the amount to a string for the bidder
+	amount := randomWeiAmount.String()
 
 	// Determine how to handle the input
 	var err error
@@ -298,7 +332,7 @@ func sendPreconfBid(bidderClient *bb.Bidder, input interface{}, blockNumber int6
 
 	case *types.Transaction:
 		// Input is a transaction object, send the transaction object
-		log.Info("sending bid with tx payload", "tx", input.(*types.Transaction).Hash().String())
+		log.Info("sending bid with tx payload", "tx", v.Hash().String())
 		// Send the bid with the full transaction object
 		_, err = bidderClient.SendBid([]*types.Transaction{v}, amount, blockNumber, decayStart, decayEnd)
 
@@ -326,6 +360,14 @@ func parseUintEnvVar(name, value string) (uint64, error) {
 	parsedValue, err := strconv.ParseUint(value, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("environment variable %s must be a positive integer, got '%s'", name, value)
+	}
+	return parsedValue, nil
+}
+
+func parseFloatEnvVar(name, value string) (float64, error) {
+	parsedValue, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0, fmt.Errorf("environment variable %s must be a float, got '%s'", name, value)
 	}
 	return parsedValue, nil
 }
