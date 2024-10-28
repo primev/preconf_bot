@@ -118,13 +118,7 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 	blobFeeCap.Mul(blobFeeCap, incrementFactor).Div(blobFeeCap, big.NewInt(100))
 
 	baseFee := header.BaseFee
-
-	// Set the max priority fee per gas to be 2 times the base fee
-	maxPriorityFee := new(big.Int).Mul(baseFee, big.NewInt(2))
-
-	// Set the max fee per gas to be 2 times the max priority fee
-	maxFeePerGas := new(big.Int).Mul(maxPriorityFee, big.NewInt(2))
-
+	maxFeePerGas := baseFee
 
 	// Create a new BlobTx transaction
 	tx := types.NewTx(&types.BlobTx{
