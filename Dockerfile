@@ -7,8 +7,7 @@ RUN go mod download
 
 COPY . .
 
+# Build the binary as preconf_bot from main.go at the top level
+RUN go build -o preconf_bot .
 
-RUN go build -o getPreconf ./cmd
-
-
-ENTRYPOINT ["./getPreconf"]
+ENTRYPOINT ["./preconf_bot"]
