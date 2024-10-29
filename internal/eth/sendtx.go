@@ -20,7 +20,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/holiman/uint256"
-	bb "github.com/primev/preconf_blob_bidder/core/mevcommit"
+	bb "github.com/primev/preconf_blob_bidder/internal/mevcommit"
 	"golang.org/x/exp/rand"
 )
 

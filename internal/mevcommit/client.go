@@ -7,7 +7,7 @@ import (
 	"crypto/ecdsa"
 	"math/big"
 
-	pb "github.com/primev/preconf_blob_bidder/core/bidderpb"
+	pb "github.com/primev/preconf_blob_bidder/internal/bidderpb"
 	"google.golang.org/grpc"
 
 	"github.com/ethereum/go-ethereum/crypto"

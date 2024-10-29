@@ -14,8 +14,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
-	ee "github.com/primev/preconf_blob_bidder/core/eth"
-	bb "github.com/primev/preconf_blob_bidder/core/mevcommit"
+	ee "github.com/primev/preconf_blob_bidder/internal/eth"
+	bb "github.com/primev/preconf_blob_bidder/internal/mevcommit"
 	"github.com/urfave/cli/v2"
 )
 

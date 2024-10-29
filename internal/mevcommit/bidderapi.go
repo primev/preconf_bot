@@ -12,7 +12,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
-	pb "github.com/primev/preconf_blob_bidder/core/bidderpb"
+	pb "github.com/primev/preconf_blob_bidder/internal/bidderpb"
 )
 
 func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decayStart, decayEnd int64) (pb.Bidder_SendBidClient, error) {
