@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"math/rand"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,236 +14,273 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/joho/godotenv"
 	ee "github.com/primev/preconf_blob_bidder/core/eth"
 	bb "github.com/primev/preconf_blob_bidder/core/mevcommit"
+	"github.com/urfave/cli/v2"
 )
 
-var NUM_BLOBS = 6
+const NUM_BLOBS = 6
 
 func main() {
-	// Load the .env file
-	err := godotenv.Load()
-	if err != nil {
-		log.Crit("Error loading .env file", "err", err)
-	}
-
 	// Set up logging
 	glogger := log.NewGlogHandler(log.NewTerminalHandler(os.Stderr, true))
 	glogger.Verbosity(log.LevelInfo)
 	log.SetDefault(log.NewLogger(glogger))
 
-	// Read configuration from environment variables
-	bidderAddress := os.Getenv("BIDDER_ADDRESS")
-	if bidderAddress == "" {
-		bidderAddress = "mev-commit-bidder:13524"
-	}
-
-	usePayloadEnv := os.Getenv("USE_PAYLOAD")
-	usePayload := true // Default value
-	if usePayloadEnv != "" {
-		// Convert usePayloadEnv to bool
-		var err error
-		usePayload, err = parseBoolEnvVar("USE_PAYLOAD", usePayloadEnv)
-		if err != nil {
-			log.Crit("Invalid USE_PAYLOAD value", "err", err)
-		}
-	}
-
-	// Now, load rpcEndpoint conditionally
-	var rpcEndpoint string
-	if !usePayload {
-		rpcEndpoint = os.Getenv("RPC_ENDPOINT")
-		if rpcEndpoint == "" {
-			log.Crit("RPC_ENDPOINT environment variable is required when USE_PAYLOAD is false")
-		}
-	}
-
-	wsEndpoint := os.Getenv("WS_ENDPOINT")
-	if wsEndpoint == "" {
-		log.Crit("WS_ENDPOINT environment variable is required")
-	}
-
-	privateKeyHex := os.Getenv("PRIVATE_KEY")
-	if privateKeyHex == "" {
-		log.Crit("PRIVATE_KEY environment variable is required")
-	}
-
-	offsetEnv := os.Getenv("OFFSET")
-	var offset uint64 = 1 // Default offset
-	if offsetEnv != "" {
-		// Convert offsetEnv to uint64
-		var err error
-		offset, err = parseUintEnvVar("OFFSET", offsetEnv)
-		if err != nil {
-			log.Crit("Invalid OFFSET value", "err", err)
-		}
-	}
-
-	// Read bidAmount from environment variable
-	bidAmountEnv := os.Getenv("BID_AMOUNT")
-	var bidAmount float64 = 0.001 // Default bid amount
-	if bidAmountEnv != "" {
-		var err error
-		bidAmount, err = parseFloatEnvVar("BID_AMOUNT", bidAmountEnv)
-		if err != nil {
-			log.Crit("Invalid BID_AMOUNT value", "err", err)
-		}
-	}
-
-	// Read stdDevPercentage from environment variable
-	stdDevPercentageEnv := os.Getenv("BID_AMOUNT_STD_DEV_PERCENTAGE")
-	var stdDevPercentage float64 = 100.0 // Default std percent is 100%
-	if stdDevPercentageEnv != "" {
-		var err error
-		stdDevPercentage, err = parseFloatEnvVar("BID_AMOUNT_STD_DEV_PERCENTAGE", stdDevPercentageEnv)
-		if err != nil {
-			log.Crit("Invalid BID_AMOUNT_STD_DEV_PERCENTAGE value", "err", err)
-		}
-	}
-
-	// these variables are not required
-	ethTransfer := os.Getenv("ETH_TRANSFER")
-	blob := os.Getenv("BLOB")
-
-	// Validate that only one of the flags is set
-	if ethTransfer == "true" && blob == "true" {
-		log.Crit("Only one of --ethtransfer or --blob can be set at a time")
-	}
-
-	// Log configuration values (excluding sensitive data)
-	log.Info("Configuration values",
-		"bidderAddress", bidderAddress,
-		"rpcEndpoint", maskEndpoint(rpcEndpoint),
-		"wsEndpoint", maskEndpoint(wsEndpoint),
-		"offset", offset,
-		"usePayload", usePayload,
-		"bidAmount", bidAmount,
-		"stdDevPercentage", stdDevPercentage,
-	)
-
-	authAcct, err := bb.AuthenticateAddress(privateKeyHex)
-	if err != nil {
-		log.Crit("Failed to authenticate private key:", "err", err)
-	}
-
-	cfg := bb.BidderConfig{
-		ServerAddress: bidderAddress,
-		LogFmt:        "json",
-		LogLevel:      "info",
-	}
-
-	bidderClient, err := bb.NewBidderClient(cfg)
-	if err != nil {
-		log.Crit("failed to connect to mev-commit bidder API", "err", err)
-	}
-
-	log.Info("connected to mev-commit client")
-
-	timeout := 30 * time.Second
-
-	// Only connect to the RPC client if usePayload is false
-	if !usePayload {
-		// Connect to RPC client
-		client := connectRPCClientWithRetries(rpcEndpoint, 5, timeout)
-		if client == nil {
-			log.Error("failed to connect to RPC client", rpcEndpoint)
-		}
-		log.Info("(rpc) geth client connected", "endpoint", rpcEndpoint)
-	}
-
-	// Connect to WS client
-	wsClient, err := connectWSClient(wsEndpoint)
-	if err != nil {
-		log.Crit("failed to connect to geth client", "err", err)
-	}
-	log.Info("(ws) geth client connected")
-
-	headers := make(chan *types.Header)
-	sub, err := wsClient.SubscribeNewHead(context.Background(), headers)
-	if err != nil {
-		log.Crit("failed to subscribe to new blocks", "err", err)
-	}
-
-	timer := time.NewTimer(24 * 14 * time.Hour)
-
-
-	for {
-		select {
-		case <-timer.C:
-			log.Info("Stopping the loop.")
-			return
-		case err := <-sub.Err():
-			log.Warn("subscription error", "err", err)
-			wsClient, sub = reconnectWSClient(wsEndpoint, headers)
-			continue
-		case header := <-headers:
-			var signedTx *types.Transaction
-			var blockNumber uint64
-			if ethTransfer == "true" {
-				amount := new(big.Int).SetInt64(1e15)
-				signedTx, blockNumber, err = ee.SelfETHTransfer(wsClient, authAcct, amount, offset)
-			} else if blob == "true" {
-				// Execute Blob Transaction
-				signedTx, blockNumber, err = ee.ExecuteBlobTransaction(wsClient, authAcct, NUM_BLOBS, offset)
-			}
-
-			if signedTx == nil {
-				log.Error("Transaction was not signed or created.")
+	app := &cli.App{
+		Name:  "Preconf Bidder",
+		Usage: "A tool for bidding in mev-commit preconfirmation auctions for blobs and transactions",
+		Before: func(c *cli.Context) error {
+			// Load the .env file before flags are parsed
+			envFile := c.String("env")
+			if envFile != "" {
+				if err := loadEnvFile(envFile); err != nil {
+					return fmt.Errorf("error loading .env file: %w", err)
+				}
 			} else {
-				log.Info("Transaction sent successfully")
+				// Optionally load default .env
+				if _, err := os.Stat(".env"); err == nil {
+					if err := loadEnvFile(".env"); err != nil {
+						return fmt.Errorf("error loading default .env file: %w", err)
+					}
+				}
+			}
+			return nil
+		},
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "env",
+				Usage:   "Path to .env file",
+				EnvVars: []string{"ENV_FILE"},
+			},
+			&cli.StringFlag{
+				Name:    "bidder-address",
+				Usage:   "Address of the bidder",
+				EnvVars: []string{"BIDDER_ADDRESS"},
+				Value:   "mev-commit-bidder:13524",
+			},
+			&cli.BoolFlag{
+				Name:    "use-payload",
+				Usage:   "Use payload for transactions",
+				EnvVars: []string{"USE_PAYLOAD"},
+				Value:   true,
+			},
+			&cli.StringFlag{
+				Name:     "rpc-endpoint",
+				Usage:    "RPC endpoint when use-payload is false",
+				EnvVars:  []string{"RPC_ENDPOINT"},
+				Required: false,
+			},
+			&cli.StringFlag{
+				Name:     "ws-endpoint",
+				Usage:    "WebSocket endpoint for transactions",
+				EnvVars:  []string{"WS_ENDPOINT"},
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:      "private-key",
+				Usage:     "Private key for signing transactions",
+				EnvVars:   []string{"PRIVATE_KEY"},
+				Required:  true,
+				Hidden:    true,
+				TakesFile: false,
+			},
+			&cli.Uint64Flag{
+				Name:    "offset",
+				Usage:   "Offset value for transactions",
+				EnvVars: []string{"OFFSET"},
+				Value:   1,
+			},
+			&cli.Float64Flag{
+				Name:    "bid-amount",
+				Usage:   "Amount to bid",
+				EnvVars: []string{"BID_AMOUNT"},
+				Value:   0.001,
+			},
+			&cli.Float64Flag{
+				Name:    "bid-amount-std-dev-percentage",
+				Usage:   "Standard deviation percentage for bid amount",
+				EnvVars: []string{"BID_AMOUNT_STD_DEV_PERCENTAGE"},
+				Value:   100.0,
+			},
+			&cli.BoolFlag{
+				Name:    "eth-transfer",
+				Usage:   "Flag for ETH transfer",
+				EnvVars: []string{"ETH_TRANSFER"},
+			},
+			&cli.BoolFlag{
+				Name:    "blob",
+				Usage:   "Flag for Blob transfer",
+				EnvVars: []string{"BLOB"},
+			},
+		},
+		Action: func(c *cli.Context) error {
+			// Retrieve flag values
+			bidderAddress := c.String("bidder-address")
+			usePayload := c.Bool("use-payload")
+			rpcEndpoint := c.String("rpc-endpoint")
+			wsEndpoint := c.String("ws-endpoint")
+			privateKeyHex := c.String("private-key")
+			offset := c.Uint64("offset")
+			bidAmount := c.Float64("bid-amount")
+			stdDevPercentage := c.Float64("bid-amount-std-dev-percentage")
+			ethTransfer := c.Bool("eth-transfer")
+			blob := c.Bool("blob")
+
+			// Validate that only one of ethTransfer or blob is set
+			if ethTransfer && blob {
+				return fmt.Errorf("only one of --eth-transfer or --blob can be set at a time")
 			}
 
-			// Check for errors before using signedTx
-			if err != nil {
-				log.Error("failed to execute transaction", "err", err)
+			// Validate RPC_ENDPOINT if usePayload is false
+			if !usePayload && rpcEndpoint == "" {
+				return fmt.Errorf("RPC_ENDPOINT is required when USE_PAYLOAD is false")
 			}
 
-			log.Info("new block received",
-				"blockNumber", header.Number,
-				"timestamp", header.Time,
-				"hash", header.Hash().String(),
+			// Log configuration values (excluding sensitive data)
+			log.Info("Configuration values",
+				"bidderAddress", bidderAddress,
+				"rpcEndpoint", maskEndpoint(rpcEndpoint),
+				"wsEndpoint", maskEndpoint(wsEndpoint),
+				"offset", offset,
+				"usePayload", usePayload,
+				"bidAmount", bidAmount,
+				"stdDevPercentage", stdDevPercentage,
 			)
 
-			// Compute standard deviation in ETH
-			stdDev := bidAmount * stdDevPercentage / 100.0
-
-			// Generate random amount with normal distribution
-			randomEthAmount := rand.NormFloat64()*stdDev + bidAmount
-
-			// Ensure the randomEthAmount is positive
-			if randomEthAmount <= 0 {
-				randomEthAmount = bidAmount // fallback to bidAmount
-			}
-
-			if usePayload {
-				// If use-payload is true, send the transaction payload to mev-commit. Don't send bundle
-				sendPreconfBid(bidderClient, signedTx, int64(blockNumber), randomEthAmount)
-			} else {
-				// send as a flashbots bundle and send the preconf bid with the transaction hash
-				_, err = ee.SendBundle(rpcEndpoint, signedTx, blockNumber)
-				if err != nil {
-					log.Error("Failed to send transaction", "rpcEndpoint", rpcEndpoint, "error", err)
-				}
-				sendPreconfBid(bidderClient, signedTx.Hash().String(), int64(blockNumber), randomEthAmount)
-			}
-
-			// handle ExecuteBlob error
+			// Authenticate with private key
+			authAcct, err := bb.AuthenticateAddress(privateKeyHex)
 			if err != nil {
-				log.Error("failed to execute blob tx", "err", err)
-				continue // Skip to the next endpoint
+				return fmt.Errorf("failed to authenticate private key: %w", err)
 			}
-		}
+
+			cfg := bb.BidderConfig{
+				ServerAddress: bidderAddress,
+				LogFmt:        "json",
+				LogLevel:      "info",
+			}
+
+			bidderClient, err := bb.NewBidderClient(cfg)
+			if err != nil {
+				return fmt.Errorf("failed to connect to mev-commit bidder API: %w", err)
+			}
+
+			log.Info("Connected to mev-commit client")
+
+			timeout := 30 * time.Second
+
+			// Only connect to the RPC client if usePayload is false
+			var rpcClient *ethclient.Client
+			if !usePayload {
+				rpcClient = connectRPCClientWithRetries(rpcEndpoint, 5, timeout)
+				if rpcClient == nil {
+					log.Error("Failed to connect to RPC client", "rpcEndpoint", maskEndpoint(rpcEndpoint))
+				} else {
+					log.Info("(rpc) Geth client connected", "endpoint", maskEndpoint(rpcEndpoint))
+				}
+			}
+
+			// Connect to WS client
+			wsClient, err := connectWSClient(wsEndpoint)
+			if err != nil {
+				return fmt.Errorf("failed to connect to WebSocket client: %w", err)
+			}
+			log.Info("(ws) Geth client connected", "endpoint", maskEndpoint(wsEndpoint))
+
+			headers := make(chan *types.Header)
+			sub, err := wsClient.SubscribeNewHead(context.Background(), headers)
+			if err != nil {
+				return fmt.Errorf("failed to subscribe to new blocks: %w", err)
+			}
+
+			// Timer set for 24 * 14 hours (336 hours)
+			timer := time.NewTimer(24 * 14 * time.Hour)
+
+			for {
+				select {
+				case <-timer.C:
+					log.Info("Stopping the loop.")
+					return nil
+				case err := <-sub.Err():
+					log.Warn("Subscription error", "err", err)
+					wsClient, sub = reconnectWSClient(wsEndpoint, headers)
+					continue
+				case header := <-headers:
+					var signedTx *types.Transaction
+					var blockNumber uint64
+					if ethTransfer {
+						amount := new(big.Int).SetInt64(1e15)
+						signedTx, blockNumber, err = ee.SelfETHTransfer(wsClient, authAcct, amount, offset)
+					} else if blob {
+						// Execute Blob Transaction
+						signedTx, blockNumber, err = ee.ExecuteBlobTransaction(wsClient, authAcct, NUM_BLOBS, offset)
+					}
+
+					if signedTx == nil {
+						log.Error("Transaction was not signed or created.")
+					} else {
+						log.Info("Transaction sent successfully")
+					}
+
+					// Check for errors before using signedTx
+					if err != nil {
+						log.Error("Failed to execute transaction", "err", err)
+					}
+
+					log.Info("New block received",
+						"blockNumber", header.Number,
+						"timestamp", header.Time,
+						"hash", header.Hash().String(),
+					)
+
+					// Compute standard deviation in ETH
+					stdDev := bidAmount * stdDevPercentage / 100.0
+
+					// Generate random amount with normal distribution
+					randomEthAmount := rand.NormFloat64()*stdDev + bidAmount
+
+					// Ensure the randomEthAmount is positive
+					if randomEthAmount <= 0 {
+						randomEthAmount = bidAmount // Fallback to bidAmount
+					}
+
+					if usePayload {
+						// If use-payload is true, send the transaction payload to mev-commit. Don't send bundle
+						sendPreconfBid(bidderClient, signedTx, int64(blockNumber), randomEthAmount)
+					} else {
+						// Send as a flashbots bundle and send the preconf bid with the transaction hash
+						_, err = ee.SendBundle(rpcEndpoint, signedTx, blockNumber)
+						if err != nil {
+							log.Error("Failed to send transaction", "rpcEndpoint", maskEndpoint(rpcEndpoint), "error", err)
+						}
+						sendPreconfBid(bidderClient, signedTx.Hash().String(), int64(blockNumber), randomEthAmount)
+					}
+
+					// Handle ExecuteBlob error
+					if err != nil {
+						log.Error("Failed to execute blob tx", "err", err)
+						continue // Skip to the next iteration
+					}
+				}
+			}
+		},
+	}
+
+	// Run the app
+	if err := app.Run(os.Args); err != nil {
+		log.Crit("Application error", "err", err)
 	}
 }
 
-func maskEndpoint(rpcEndpoint string) string {
-	if len(rpcEndpoint) > 5 {
-		return rpcEndpoint[:5] + "*****"
+// maskEndpoint masks sensitive parts of the endpoint URLs
+func maskEndpoint(endpoint string) string {
+	if len(endpoint) > 10 {
+		return endpoint[:10] + "*****"
 	}
 	return "*****"
 }
 
+// connectRPCClientWithRetries attempts to connect to the RPC client with retries and exponential backoff
 func connectRPCClientWithRetries(rpcEndpoint string, maxRetries int, timeout time.Duration) *ethclient.Client {
 	var rpcClient *ethclient.Client
 	var err error
@@ -258,25 +294,30 @@ func connectRPCClientWithRetries(rpcEndpoint string, maxRetries int, timeout tim
 			return rpcClient
 		}
 
-		log.Warn("failed to connect to RPC client, retrying...", "attempt", i+1, "err", err)
-		time.Sleep(10 * time.Duration(math.Pow(2, float64(i)))) // Exponential backoff
+		log.Warn("Failed to connect to RPC client, retrying...",
+			"attempt", i+1,
+			"err", err,
+		)
+		time.Sleep(10 * time.Duration(math.Pow(2, float64(i))) * time.Second) // Exponential backoff
 	}
 
-	log.Error("failed to connect to RPC client after retries", "err", err)
+	log.Error("Failed to connect to RPC client after retries", "err", err)
 	return nil
 }
 
+// connectWSClient attempts to connect to the WebSocket client with continuous retries
 func connectWSClient(wsEndpoint string) (*ethclient.Client, error) {
 	for {
 		wsClient, err := bb.NewGethClient(wsEndpoint)
 		if err == nil {
 			return wsClient, nil
 		}
-		log.Warn("failed to connect to websocket client", "err", err)
+		log.Warn("Failed to connect to WebSocket client", "err", err)
 		time.Sleep(10 * time.Second)
 	}
 }
 
+// reconnectWSClient attempts to reconnect to the WebSocket client with limited retries
 func reconnectWSClient(wsEndpoint string, headers chan *types.Header) (*ethclient.Client, ethereum.Subscription) {
 	var wsClient *ethclient.Client
 	var sub ethereum.Subscription
@@ -285,26 +326,30 @@ func reconnectWSClient(wsEndpoint string, headers chan *types.Header) (*ethclien
 	for i := 0; i < 10; i++ { // Retry logic for WebSocket connection
 		wsClient, err = connectWSClient(wsEndpoint)
 		if err == nil {
-			log.Info("(ws) geth client reconnected")
+			log.Info("(ws) Geth client reconnected", "endpoint", maskEndpoint(wsEndpoint))
 			sub, err = wsClient.SubscribeNewHead(context.Background(), headers)
 			if err == nil {
 				return wsClient, sub
 			}
 		}
-		log.Warn("failed to reconnect WebSocket client, retrying...", "attempt", i+1, "err", err)
+		log.Warn("Failed to reconnect WebSocket client, retrying...",
+			"attempt", i+1,
+			"err", err,
+		)
 		time.Sleep(5 * time.Second)
 	}
-	log.Crit("failed to reconnect WebSocket client after retries", "err", err)
+	log.Crit("Failed to reconnect WebSocket client after retries", "err", err)
 	return nil, nil
 }
 
+// sendPreconfBid sends a preconfirmation bid to the bidder client
 func sendPreconfBid(bidderClient *bb.Bidder, input interface{}, blockNumber int64, randomEthAmount float64) {
 	// Get current time in milliseconds
 	currentTime := time.Now().UnixMilli()
 
 	// Define bid decay start and end
 	decayStart := currentTime
-	decayEnd := currentTime + int64(time.Duration(36*time.Second).Milliseconds()) // bid decay is 36 seconds (2 blocks)
+	decayEnd := currentTime + int64(time.Duration(36*time.Second).Milliseconds()) // Bid decay is 36 seconds (2 blocks)
 
 	// Convert the random ETH amount to wei (1 ETH = 10^18 wei)
 	bigEthAmount := big.NewFloat(randomEthAmount)
@@ -324,48 +369,52 @@ func sendPreconfBid(bidderClient *bb.Bidder, input interface{}, blockNumber int6
 	case string:
 		// Input is a string, process it as a transaction hash
 		txHash := strings.TrimPrefix(v, "0x")
-		log.Info("sending bid with transaction hash", "tx", input)
+		log.Info("Sending bid with transaction hash", "tx", txHash)
 		// Send the bid with tx hash string
 		_, err = bidderClient.SendBid([]string{txHash}, amount, blockNumber, decayStart, decayEnd)
 
 	case *types.Transaction:
 		// Input is a transaction object, send the transaction object
-		log.Info("sending bid with tx payload", "tx", v.Hash().String())
+		log.Info("Sending bid with transaction payload", "tx", v.Hash().String())
 		// Send the bid with the full transaction object
 		_, err = bidderClient.SendBid([]*types.Transaction{v}, amount, blockNumber, decayStart, decayEnd)
 
 	default:
-		log.Warn("unsupported input type, must be string or *types.Transaction")
+		log.Warn("Unsupported input type, must be string or *types.Transaction")
 		return
 	}
 
 	if err != nil {
-		log.Warn("failed to send bid", "err", err)
+		log.Warn("Failed to send bid", "err", err)
 	} else {
-		log.Info("sent preconfirmation bid", "block", blockNumber, "amount (ETH)", randomEthAmount)
+		log.Info("Sent preconfirmation bid",
+			"block", blockNumber,
+			"amount (ETH)", randomEthAmount,
+		)
 	}
 }
 
-func parseBoolEnvVar(name, value string) (bool, error) {
-	parsedValue, err := strconv.ParseBool(value)
+// loadEnvFile loads the specified .env file into the environment variables
+func loadEnvFile(filename string) error {
+	data, err := os.ReadFile(filename)
 	if err != nil {
-		return false, fmt.Errorf("environment variable %s must be true or false, got '%s'", name, value)
+		return err
 	}
-	return parsedValue, nil
-}
-
-func parseUintEnvVar(name, value string) (uint64, error) {
-	parsedValue, err := strconv.ParseUint(value, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("environment variable %s must be a positive integer, got '%s'", name, value)
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		// Ignore comments and empty lines
+		trimmed := strings.TrimSpace(line)
+		if len(trimmed) == 0 || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		// Split key and value
+		parts := strings.SplitN(trimmed, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		os.Setenv(key, value)
 	}
-	return parsedValue, nil
-}
-
-func parseFloatEnvVar(name, value string) (float64, error) {
-	parsedValue, err := strconv.ParseFloat(value, 64)
-	if err != nil {
-		return 0, fmt.Errorf("environment variable %s must be a float, got '%s'", name, value)
-	}
-	return parsedValue, nil
+	return nil
 }

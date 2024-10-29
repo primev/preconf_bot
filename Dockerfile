@@ -12,5 +12,3 @@ RUN go build -o getPreconf ./cmd
 
 
 ENTRYPOINT ["./getPreconf"]
-
-CMD ["--ethtransfer"]
