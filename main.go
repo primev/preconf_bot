@@ -22,6 +22,18 @@ import (
 const NUM_BLOBS = 6
 
 func main() {
+	// Load the .env file before setting up the app
+	envFile := os.Getenv("ENV_FILE")
+	if envFile == "" {
+		envFile = ".env"
+	}
+	if _, err := os.Stat(envFile); err == nil {
+		if err := loadEnvFile(envFile); err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading .env file: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	
 	// Set up logging
 	glogger := log.NewGlogHandler(log.NewTerminalHandler(os.Stderr, true))
 	glogger.Verbosity(log.LevelInfo)
@@ -30,23 +42,23 @@ func main() {
 	app := &cli.App{
 		Name:  "Preconf Bidder",
 		Usage: "A tool for bidding in mev-commit preconfirmation auctions for blobs and transactions",
-		Before: func(c *cli.Context) error {
-			// Load the .env file before flags are parsed
-			envFile := c.String("env")
-			if envFile != "" {
-				if err := loadEnvFile(envFile); err != nil {
-					return fmt.Errorf("error loading .env file: %w", err)
-				}
-			} else {
-				// Optionally load default .env
-				if _, err := os.Stat(".env"); err == nil {
-					if err := loadEnvFile(".env"); err != nil {
-						return fmt.Errorf("error loading default .env file: %w", err)
-					}
-				}
-			}
-			return nil
-		},
+		// Before: func(c *cli.Context) error {
+			// // Load the .env file before flags are parsed
+			// envFile := c.String("env")
+			// if envFile != "" {
+			// 	if err := loadEnvFile(envFile); err != nil {
+			// 		return fmt.Errorf("error loading .env file: %w", err)
+			// 	}
+			// } else {
+			// 	// Optionally load default .env
+			// 	if _, err := os.Stat(".env"); err == nil {
+			// 		if err := loadEnvFile(".env"); err != nil {
+			// 			return fmt.Errorf("error loading default .env file: %w", err)
+			// 		}
+			// 	}
+			// }
+			// return nil
+		// },
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "env",
