@@ -2,10 +2,10 @@ package eth
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -17,16 +17,6 @@ type FlashbotsPayload struct {
 	Method  string                   `json:"method"`
 	Params  []map[string]interface{} `json:"params"`
 	ID      int                      `json:"id"`
-}
-
-var httpClient = &http.Client{
-	Timeout: 12 * time.Second,
-	Transport: &http.Transport{
-		DisableKeepAlives:   false,
-		MaxIdleConnsPerHost: 1,
-		IdleConnTimeout:     12 * time.Second,
-		TLSHandshakeTimeout: 10 * time.Second,
-	},
 }
 
 func SendBundle(RPCURL string, signedTx *types.Transaction, blkNum uint64) (string, error) {
@@ -57,15 +47,21 @@ func SendBundle(RPCURL string, signedTx *types.Transaction, blkNum uint64) (stri
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", RPCURL, bytes.NewBuffer(payloadBytes))
+	// Create a context with a timeout
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", RPCURL, bytes.NewBuffer(payloadBytes))
 	if err != nil {
-		log.Error("an error occurred creating request", "err", err)
+		log.Error("An error occurred creating the request", "err", err)
+		return "", err
 	}
 	req.Header.Add("Content-Type", "application/json")
 
-	resp, err := httpClient.Do(req)
+	// Use the default HTTP client
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Error("an error occurred", "err", err)
+		log.Error("An error occurred during the request", "err", err)
 		return "", err
 	}
 	defer resp.Body.Close()
