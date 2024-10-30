@@ -43,25 +43,38 @@ func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.
 	if err != nil {
 		return nil, 0, err
 	}
-	baseFee := header.BaseFee
-
-	blockNumber := header.Number.Uint64()
-
 	// Get the chain ID
 	chainID, err := client.NetworkID(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// Create a new EIP-1559 transaction
+
+	baseFee := header.BaseFee
+
+	blockNumber := header.Number.Uint64()
+
+	// Create a transaction with a priority fee.
+	priorityFee := big.NewInt(2_000_000_000) // 2 gwei in wei
+	maxFee := new(big.Int).Add(baseFee, priorityFee)
 	tx := types.NewTx(&types.DynamicFeeTx{
 		Nonce:     nonce,
 		To:        &authAcct.Address,
 		Value:     value,
 		Gas:       500_000,
-		GasFeeCap: baseFee,
-		GasTipCap: big.NewInt(0),
+		GasFeeCap: maxFee,
+		GasTipCap: priorityFee,
 	})
+
+	// Create a new EIP-1559 transaction with 0 priority fee.
+	// tx := types.NewTx(&types.DynamicFeeTx{
+	// 	Nonce:     nonce,
+	// 	To:        &authAcct.Address,
+	// 	Value:     value,
+	// 	Gas:       500_000,
+	// 	GasFeeCap: baseFee,
+	// 	GasTipCap: big.NewInt(0),
+	// })
 
 	// Sign the transaction with the authenticated account's private key
 	signer := types.LatestSignerForChainID(chainID)
