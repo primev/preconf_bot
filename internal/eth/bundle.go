@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -11,6 +12,16 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 )
+
+type JSONRPCResponse struct {
+	Result json.RawMessage `json:"result"`
+	Error  *RPCError       `json:"error"`
+}
+
+type RPCError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
 
 type FlashbotsPayload struct {
 	Jsonrpc string                   `json:"jsonrpc"`
@@ -65,12 +76,32 @@ func SendBundle(RPCURL string, signedTx *types.Transaction, blkNum uint64) (stri
 		return "", err
 	}
 	defer resp.Body.Close()
-
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Error("an error occurred", "err", err)
+		log.Error("An error occurred reading the response body", "err", err)
 		return "", err
 	}
 
-	return string(body), nil
+// Parse the response body
+var rpcResp JSONRPCResponse
+err = json.Unmarshal(body, &rpcResp)
+if err != nil {
+	log.Error("Failed to unmarshal response", "err", err)
+	return "", err
+}
+
+if rpcResp.Error != nil {
+	log.Error("Received error from RPC", "code", rpcResp.Error.Code, "message", rpcResp.Error.Message)
+	// Log the error and return a new error without using fmt
+	return "", fmt.Errorf("RPC Error %d: %s", rpcResp.Error.Code, rpcResp.Error.Message)
+}
+
+	// Return the result
+	resultStr, err := json.Marshal(rpcResp.Result)
+	if err != nil {
+		log.Error("Failed to marshal result", "err", err)
+		return "", err
+	}
+
+	return string(resultStr), nil
 }
