@@ -9,6 +9,7 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"math/big"
+	"time"
 
 	"github.com/consensys/gnark-crypto/ecc/bls12-381/fr"
 	gokzg4844 "github.com/crate-crypto/go-kzg-4844"
@@ -24,26 +25,30 @@ import (
 	"golang.org/x/exp/rand"
 )
 
+const defaultTimeout = 15 * time.Second 
 
 func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.Int, offset uint64) (*types.Transaction, uint64, error) {
+	// Set a timeout context
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+
 	// Get the account's nonce
-	nonce, err := client.PendingNonceAt(context.Background(), authAcct.Address)
+	nonce, err := client.PendingNonceAt(ctx, authAcct.Address)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	// Get the current base fee per gas from the latest block header
-	header, err := client.HeaderByNumber(context.Background(), nil)
+	header, err := client.HeaderByNumber(ctx, nil)
 	if err != nil {
 		return nil, 0, err
 	}
 	baseFee := header.BaseFee
 
-	
 	blockNumber := header.Number.Uint64()
 
-	// Get the chain ID (this does not work with the Titan RPC)
-	chainID, err := client.NetworkID(context.Background())
+	// Get the chain ID
+	chainID, err := client.NetworkID(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -55,7 +60,7 @@ func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.
 		Value:     value,
 		Gas:       500_000,
 		GasFeeCap: baseFee,
-		GasTipCap: big.NewInt((0)),
+		GasTipCap: big.NewInt(0),
 	})
 
 	// Sign the transaction with the authenticated account's private key
@@ -67,9 +72,7 @@ func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.
 	}
 
 	return signedTx, blockNumber + offset, nil
-
 }
-
 
 func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numBlobs int, offset uint64) (*types.Transaction, uint64, error) {
 	var (
@@ -77,6 +80,10 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 		blockNumber uint64
 		nonce       uint64
 	)
+
+	// Set a timeout context
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
 
 	privateKey := authAcct.PrivateKey
 	publicKey := privateKey.Public()
@@ -86,19 +93,19 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 	}
 	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
 
-	nonce, err := client.PendingNonceAt(context.Background(), authAcct.Address)
+	nonce, err := client.PendingNonceAt(ctx, authAcct.Address)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	header, err := client.HeaderByNumber(context.Background(), nil)
+	header, err := client.HeaderByNumber(ctx, nil)
 	if err != nil {
 		return nil, 0, err
 	}
-	
+
 	blockNumber = header.Number.Uint64()
 
-	chainID, err := client.NetworkID(context.Background())
+	chainID, err := client.NetworkID(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -124,7 +131,7 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 	tx := types.NewTx(&types.BlobTx{
 		ChainID:    uint256.MustFromBig(chainID),
 		Nonce:      nonce,
-		GasTipCap: uint256.NewInt(0),
+		GasTipCap:  uint256.NewInt(0),
 		GasFeeCap:  uint256.MustFromBig(maxFeePerGas),
 		Gas:        gasLimit,
 		To:         fromAddress,
@@ -147,7 +154,6 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 	}
 	return signedTx, blockNumber + offset, nil
 }
-
 
 func makeSidecar(blobs []kzg4844.Blob) *types.BlobTxSidecar {
 	var (

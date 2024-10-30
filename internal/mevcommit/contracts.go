@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -21,10 +22,12 @@ import (
 // Contract addresses used within the mev-commit protocol.
 const (
 	// latest contracts as of v0.6.1
-	bidderRegistryAddress         = "0x401B3287364f95694c43ACA3252831cAc02e5C41"
-	blockTrackerAddress           = "0x7538F3AaA07dA1990486De21A0B438F55e9639e4"
-	PreconfManagerAddress 		  = "0x9433bCD9e89F923ce587f7FA7E39e120E93eb84D"
+	bidderRegistryAddress = "0x401B3287364f95694c43ACA3252831cAc02e5C41"
+	blockTrackerAddress   = "0x7538F3AaA07dA1990486De21A0B438F55e9639e4"
+	PreconfManagerAddress = "0x9433bCD9e89F923ce587f7FA7E39e120E93eb84D"
 )
+
+const defaultTimeout = 15 * time.Second 
 
 // CommitmentStoredEvent represents the data structure for the CommitmentStored event.
 type CommitmentStoredEvent struct {
@@ -171,7 +174,9 @@ func DepositIntoWindow(client *ethclient.Client, depositWindow *big.Int, authAcc
 	}
 
 	// Wait for the transaction to be mined (optional)
-	receipt, err := bind.WaitMined(context.Background(), client, tx)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	receipt, err := bind.WaitMined(ctx, client, tx)
 	if err != nil {
 		return nil, fmt.Errorf("transaction mining error: %v", err)
 	}
@@ -246,7 +251,9 @@ func WithdrawFromWindow(client *ethclient.Client, authAcct *AuthAcct, window *bi
 	}
 
 	// Wait for the withdrawal transaction to be mined
-	withdrawalReceipt, err := bind.WaitMined(context.Background(), client, withdrawalTx)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	withdrawalReceipt, err := bind.WaitMined(ctx, client, withdrawalTx)
 	if err != nil {
 		return nil, fmt.Errorf("withdrawal transaction mining error: %v", err)
 	}
@@ -266,7 +273,7 @@ func WithdrawFromWindow(client *ethclient.Client, authAcct *AuthAcct, window *bi
 // Parameters:
 // - client: The Ethereum client instance.
 //
-// Note: The event listener is not currently functioning correctly (as per the TODO comment).
+// Note: The event listener uses a timeout of 15 seconds for subscription.
 func ListenForCommitmentStoredEvent(client *ethclient.Client) {
 	// Load the PreConfCommitmentStore contract ABI
 	contractAbi, err := LoadABI("abi/PreConfCommitmentStore.abi")
@@ -276,7 +283,9 @@ func ListenForCommitmentStoredEvent(client *ethclient.Client) {
 
 	// Subscribe to new block headers
 	headers := make(chan *types.Header)
-	sub, err := client.SubscribeNewHead(context.Background(), headers)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	sub, err := client.SubscribeNewHead(ctx, headers)
 	if err != nil {
 		log.Fatalf("Failed to subscribe to new head: %v", err)
 	}
@@ -294,7 +303,9 @@ func ListenForCommitmentStoredEvent(client *ethclient.Client) {
 			}
 
 			logs := make(chan types.Log)
-			subLogs, err := client.SubscribeFilterLogs(context.Background(), query, logs)
+			ctxLogs, cancelLogs := context.WithTimeout(context.Background(), defaultTimeout)
+			defer cancelLogs()
+			subLogs, err := client.SubscribeFilterLogs(ctxLogs, query, logs)
 			if err != nil {
 				log.Printf("Failed to subscribe to logs: %v", err)
 				continue
