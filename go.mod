@@ -8,7 +8,6 @@ require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.34.2-20240717164558-a6c49f84cc0f.2
 	github.com/ethereum/go-ethereum v1.14.11
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0
-	github.com/rs/zerolog v1.33.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240528184218-531527333157
 	google.golang.org/grpc v1.64.0
 	google.golang.org/protobuf v1.34.2
