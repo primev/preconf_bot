@@ -9,6 +9,8 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"math/big"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/consensys/gnark-crypto/ecc/bls12-381/fr"
@@ -25,7 +27,32 @@ import (
 	"golang.org/x/exp/rand"
 )
 
-const defaultTimeout = 15 * time.Second
+var defaultTimeout time.Duration
+
+// init initializes the defaultTimeout variable by reading the DEFAULT_TIMEOUT
+// environment variable. If not set or invalid, it defaults to 15 seconds.
+func init() {
+	timeoutStr := os.Getenv("DEFAULT_TIMEOUT")
+	if timeoutStr != "" {
+		timeoutSeconds, err := strconv.Atoi(timeoutStr)
+		if err != nil {
+			log.Warn().
+				Str("DEFAULT_TIMEOUT", timeoutStr).
+				Msg("Invalid DEFAULT_TIMEOUT value. Using default of 15 seconds.")
+			defaultTimeout = 15 * time.Second
+		} else {
+			defaultTimeout = time.Duration(timeoutSeconds) * time.Second
+			log.Info().
+				Dur("defaultTimeout", defaultTimeout).
+				Msg("defaultTimeout loaded from environment")
+		}
+	} else {
+		defaultTimeout = 15 * time.Second
+		log.Info().
+			Dur("defaultTimeout", defaultTimeout).
+			Msg("DEFAULT_TIMEOUT not set. Using default of 15 seconds.")
+	}
+}
 
 // SelfETHTransfer sends an ETH transfer transaction from the authenticated account.
 func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.Int, offset uint64) (*types.Transaction, uint64, error) {

@@ -31,8 +31,8 @@ func main() {
 		}
 	}
 
-    zerolog.SetGlobalLevel(zerolog.InfoLevel)
-    log.Logger = log.Output(os.Stderr).With().Timestamp().Logger()
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	log.Logger = log.Output(os.Stderr).With().Timestamp().Logger()
 
 	app := &cli.App{
 		Name:  "Preconf Bidder",
@@ -99,6 +99,12 @@ func main() {
 				EnvVars: []string{"NUM_BLOB"},
 				Value:   0,
 			},
+			&cli.UintFlag{
+				Name:    "default-timeout",
+				Usage:   "Default timeout in seconds",
+				EnvVars: []string{"DEFAULT_TIMEOUT"},
+				Value:   15, // Default to 15 seconds
+			},
 		},
 		Action: func(c *cli.Context) error {
 			// Retrieve flag values
@@ -111,12 +117,10 @@ func main() {
 			bidAmount := c.Float64("bid-amount")
 			stdDevPercentage := c.Float64("bid-amount-std-dev-percentage")
 			numBlob := c.Uint64("num-blob")
+			defaultTimeoutSeconds := c.Uint("default-timeout") // New variable
+			defaultTimeout := time.Duration(defaultTimeoutSeconds) * time.Second
 
-			// Validate RPC_ENDPOINT if usePayload is false
-			if !usePayload && rpcEndpoint == "" {
-				return fmt.Errorf("RPC_ENDPOINT is required when USE_PAYLOAD is false")
-			}
-
+			// Log the defaultTimeout value
 			log.Info().
 				Str("bidderAddress", bidderAddress).
 				Str("rpcEndpoint", bb.MaskEndpoint(rpcEndpoint)).
@@ -127,6 +131,7 @@ func main() {
 				Float64("stdDevPercentage", stdDevPercentage).
 				Uint64("numBlob", numBlob).
 				Bool("privateKeyProvided", privateKeyHex != "").
+				Uint("defaultTimeoutSeconds", defaultTimeoutSeconds).
 				Msg("Configuration values")
 
 			cfg := bb.BidderConfig{
@@ -142,7 +147,7 @@ func main() {
 
 			log.Info().Msg("Connected to mev-commit client")
 
-			timeout := 30 * time.Second
+			timeout := defaultTimeout // Use the defaultTimeout here
 
 			// Only connect to the RPC client if usePayload is false
 			var rpcClient *ethclient.Client
