@@ -139,13 +139,18 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 
 	baseFee := header.BaseFee
 	maxFeePerGas := baseFee
-
+	// Use for nonzero priority fee
+	priorityFee := big.NewInt(5_000_000_000) // 5 gwei in wei
+	maxFeePriority := new(big.Int).Add(maxFeePerGas, priorityFee)
 	// Create a new BlobTx transaction
 	tx := types.NewTx(&types.BlobTx{
 		ChainID:    uint256.MustFromBig(chainID),
 		Nonce:      nonce,
-		GasTipCap:  uint256.NewInt(0),
-		GasFeeCap:  uint256.MustFromBig(maxFeePerGas),
+		// GasTipCap:  uint256.NewInt(0),
+		// GasFeeCap:  uint256.MustFromBig(maxFeePerGas),
+		// Use the below GasTipCap and GasFeeCap for nonzero priority fee
+		GasTipCap:  uint256.MustFromBig(priorityFee),
+		GasFeeCap:  uint256.MustFromBig(maxFeePriority),
 		Gas:        gasLimit,
 		To:         fromAddress,
 		BlobFeeCap: uint256.MustFromBig(blobFeeCap),
