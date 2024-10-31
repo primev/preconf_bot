@@ -56,6 +56,11 @@ func SendPreconfBid(bidderClient BidderInterface, input interface{}, blockNumber
 		responseClient, err = bidderClient.SendBid([]string{txHash}, amount, blockNumber, decayStart, decayEnd)
 
 	case *types.Transaction:
+		// Check for nil transaction
+		if v == nil {
+			log.Warn().Msg("Transaction is nil, cannot send bid.")
+			return
+		}
 		// Input is a transaction object, send the transaction object
 		log.Info().
 			Str("tx", v.Hash().String()).
@@ -90,8 +95,6 @@ func SendPreconfBid(bidderClient BidderInterface, input interface{}, blockNumber
 			Msg("Sent preconfirmation bid and received response")
 	}
 }
-
-
 
 // SendBid method as defined earlier
 func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decayStart, decayEnd int64) (pb.Bidder_SendBidClient, error) {
