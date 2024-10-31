@@ -50,7 +50,11 @@ func SendPreconfBid(bidderClient BidderInterface, input interface{}, blockNumber
 		// Input is a string, process it as a transaction hash
 		txHash := strings.TrimPrefix(v, "0x")
 		log.Info().
-			Str("tx", txHash).
+			Str("txHash", txHash).
+			Str("amount", amount).
+			Int64("blockNumber", blockNumber).
+			Int64("decayStart", decayStart).
+			Int64("decayEnd", decayEnd).
 			Msg("Sending bid with transaction hash")
 		// Send the bid with tx hash string
 		responseClient, err = bidderClient.SendBid([]string{txHash}, amount, blockNumber, decayStart, decayEnd)
@@ -63,7 +67,11 @@ func SendPreconfBid(bidderClient BidderInterface, input interface{}, blockNumber
 		}
 		// Input is a transaction object, send the transaction object
 		log.Info().
-			Str("tx", v.Hash().String()).
+			Str("txHash", v.Hash().String()).
+			Str("amount", amount).
+			Int64("blockNumber", blockNumber).
+			Int64("decayStart", decayStart).
+			Int64("decayEnd", decayEnd).
 			Msg("Sending bid with transaction payload")
 		// Send the bid with the full transaction object
 		responseClient, err = bidderClient.SendBid([]*types.Transaction{v}, amount, blockNumber, decayStart, decayEnd)
@@ -78,6 +86,11 @@ func SendPreconfBid(bidderClient BidderInterface, input interface{}, blockNumber
 	if err != nil {
 		log.Warn().
 			Err(err).
+			Str("txHash", fmt.Sprintf("%v", input)).
+			Str("amount", amount).
+			Int64("blockNumber", blockNumber).
+			Int64("decayStart", decayStart).
+			Int64("decayEnd", decayEnd).
 			Msg("Failed to send bid")
 		return
 	}
@@ -85,16 +98,31 @@ func SendPreconfBid(bidderClient BidderInterface, input interface{}, blockNumber
 	// Call Recv() to handle the response and complete the expectation in your tests
 	_, recvErr := responseClient.Recv()
 	if recvErr == io.EOF {
-		log.Info().Msg("Bid response received: EOF")
+		log.Info().
+			Str("txHash", fmt.Sprintf("%v", input)).
+			Int64("blockNumber", blockNumber).
+			Float64("amount (ETH)", randomEthAmount).
+			Int64("decayStart", decayStart).
+			Int64("decayEnd", decayEnd).
+			Msg("Bid response received: EOF")
 	} else if recvErr != nil {
-		log.Warn().Err(recvErr).Msg("Error receiving bid response")
+		log.Warn().
+			Err(recvErr).
+			Str("txHash", fmt.Sprintf("%v", input)).
+			Int64("blockNumber", blockNumber).
+			Int64("decayStart", decayStart).
+			Int64("decayEnd", decayEnd).
+			Msg("Error receiving bid response")
 	} else {
 		log.Info().
 			Int64("block", blockNumber).
 			Float64("amount (ETH)", randomEthAmount).
+			Int64("decayStart", decayStart).
+			Int64("decayEnd", decayEnd).
 			Msg("Sent preconfirmation bid and received response")
 	}
 }
+
 
 // SendBid handles sending a bid request after preparing the input data.
 func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decayStart, decayEnd int64) (pb.Bidder_SendBidClient, error) {
