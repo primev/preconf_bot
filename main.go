@@ -17,8 +17,6 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-const NUM_BLOBS = 6
-
 func main() {
 	// Load the .env file before setting up the app
 	envFile := os.Getenv("ENV_FILE")
@@ -31,7 +29,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	
+
 	// Set up logging
 	glogger := log.NewGlogHandler(log.NewTerminalHandler(os.Stderr, true))
 	glogger.Verbosity(log.LevelInfo)
@@ -96,15 +94,11 @@ func main() {
 				EnvVars: []string{"BID_AMOUNT_STD_DEV_PERCENTAGE"},
 				Value:   100.0,
 			},
-			&cli.BoolFlag{
-				Name:    "eth-transfer",
-				Usage:   "Flag for ETH transfer",
-				EnvVars: []string{"ETH_TRANSFER"},
-			},
-			&cli.BoolFlag{
-				Name:    "blob",
-				Usage:   "Flag for Blob transfer",
-				EnvVars: []string{"BLOB"},
+			&cli.UintFlag{
+				Name:    "num-blob",
+				Usage:   "Number of blobs to send (0 for ETH transfer)",
+				EnvVars: []string{"NUM_BLOB"},
+				Value:   0,
 			},
 		},
 		Action: func(c *cli.Context) error {
@@ -117,13 +111,7 @@ func main() {
 			offset := c.Uint64("offset")
 			bidAmount := c.Float64("bid-amount")
 			stdDevPercentage := c.Float64("bid-amount-std-dev-percentage")
-			ethTransfer := c.Bool("eth-transfer")
-			blob := c.Bool("blob")
-
-			// Validate that only one of ethTransfer or blob is set
-			if ethTransfer && blob {
-				return fmt.Errorf("only one of --eth-transfer or --blob can be set at a time")
-			}
+			numBlob := c.Uint("num-blob")
 
 			// Validate RPC_ENDPOINT if usePayload is false
 			if !usePayload && rpcEndpoint == "" {
@@ -139,9 +127,8 @@ func main() {
 				"usePayload", usePayload,
 				"bidAmount", bidAmount,
 				"stdDevPercentage", stdDevPercentage,
+				"numBlob", numBlob,
 			)
-
-
 
 			cfg := bb.BidderConfig{
 				ServerAddress: bidderAddress,
@@ -197,12 +184,13 @@ func main() {
 				case header := <-headers:
 					var signedTx *types.Transaction
 					var blockNumber uint64
-					if ethTransfer {
+					if numBlob == 0 {
+						// Perform ETH Transfer
 						amount := new(big.Int).SetInt64(1e15)
 						signedTx, blockNumber, err = ee.SelfETHTransfer(wsClient, authAcct, amount, offset)
-					} else if blob {
+					} else {
 						// Execute Blob Transaction
-						signedTx, blockNumber, err = ee.ExecuteBlobTransaction(wsClient, authAcct, NUM_BLOBS, offset)
+						signedTx, blockNumber, err = ee.ExecuteBlobTransaction(wsClient, authAcct, int(numBlob), offset)
 					}
 
 					if signedTx == nil {
@@ -235,7 +223,11 @@ func main() {
 
 					if usePayload {
 						// If use-payload is true, send the transaction payload to mev-commit. Don't send bundle
-						bb.SendPreconfBid(bidderClient, signedTx, int64(blockNumber), randomEthAmount)
+						if numBlob == 0 {
+							bb.SendPreconfBid(bidderClient, signedTx, int64(blockNumber), randomEthAmount)
+						} else {
+							bb.SendPreconfBid(bidderClient, signedTx, int64(blockNumber), randomEthAmount)
+						}
 					} else {
 						// Send as a flashbots bundle and send the preconf bid with the transaction hash
 						_, err = ee.SendBundle(rpcEndpoint, signedTx, blockNumber)
@@ -247,7 +239,7 @@ func main() {
 
 					// Handle ExecuteBlob error
 					if err != nil {
-						log.Error("Failed to execute blob tx", "err", err)
+						log.Error("Failed to execute transaction", "err", err)
 						continue // Skip to the next iteration
 					}
 				}
@@ -260,60 +252,6 @@ func main() {
 		log.Crit("Application error", "err", err)
 	}
 }
-
-
-
-// // sendPreconfBid sends a preconfirmation bid to the bidder client
-// func sendPreconfBid(bidderClient *bb.Bidder, input interface{}, blockNumber int64, randomEthAmount float64) {
-// 	// Get current time in milliseconds
-// 	currentTime := time.Now().UnixMilli()
-
-// 	// Define bid decay start and end
-// 	decayStart := currentTime
-// 	decayEnd := currentTime + int64(time.Duration(36*time.Second).Milliseconds()) // Bid decay is 36 seconds (2 blocks)
-
-// 	// Convert the random ETH amount to wei (1 ETH = 10^18 wei)
-// 	bigEthAmount := big.NewFloat(randomEthAmount)
-// 	weiPerEth := big.NewFloat(1e18)
-// 	bigWeiAmount := new(big.Float).Mul(bigEthAmount, weiPerEth)
-
-// 	// Convert big.Float to big.Int
-// 	randomWeiAmount := new(big.Int)
-// 	bigWeiAmount.Int(randomWeiAmount)
-
-// 	// Convert the amount to a string for the bidder
-// 	amount := randomWeiAmount.String()
-
-// 	// Determine how to handle the input
-// 	var err error
-// 	switch v := input.(type) {
-// 	case string:
-// 		// Input is a string, process it as a transaction hash
-// 		txHash := strings.TrimPrefix(v, "0x")
-// 		log.Info("Sending bid with transaction hash", "tx", txHash)
-// 		// Send the bid with tx hash string
-// 		_, err = bidderClient.SendBid([]string{txHash}, amount, blockNumber, decayStart, decayEnd)
-
-// 	case *types.Transaction:
-// 		// Input is a transaction object, send the transaction object
-// 		log.Info("Sending bid with transaction payload", "tx", v.Hash().String())
-// 		// Send the bid with the full transaction object
-// 		_, err = bidderClient.SendBid([]*types.Transaction{v}, amount, blockNumber, decayStart, decayEnd)
-
-// 	default:
-// 		log.Warn("Unsupported input type, must be string or *types.Transaction")
-// 		return
-// 	}
-
-// 	if err != nil {
-// 		log.Warn("Failed to send bid", "err", err)
-// 	} else {
-// 		log.Info("Sent preconfirmation bid",
-// 			"block", blockNumber,
-// 			"amount (ETH)", randomEthAmount,
-// 		)
-// 	}
-// }
 
 // loadEnvFile loads the specified .env file into the environment variables
 func loadEnvFile(filename string) error {
