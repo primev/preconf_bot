@@ -219,3 +219,37 @@ func TestSendBidWithRawTransactions(t *testing.T) {
         t.Log("TestSendBidWithRawTransactions completed")
     })
 }
+
+func TestSendBidSuccess(t *testing.T) {
+    mockBidder := new(MockBidderClient)
+    mockSendBidClient := new(MockBidderSendBidClient)
+
+    txHashes := []string{"0xabc123", "0xdef456"}
+    expectedAmount := "1000000000000000000"
+    expectedBlockNumber := int64(100)
+    decayStart := int64(1000)
+    decayEnd := int64(2000)
+
+    mockBidder.On("SendBid", mock.Anything, expectedAmount, expectedBlockNumber, decayStart, decayEnd).
+        Return(mockSendBidClient, nil).Once()
+
+    _, err := mockBidder.SendBid(txHashes, expectedAmount, expectedBlockNumber, decayStart, decayEnd)
+
+    require.NoError(t, err, "Expected no error for successful bid")
+    mockBidder.AssertExpectations(t)
+}
+
+
+func TestSendBidRequestError(t *testing.T) {
+    mockBidder := new(MockBidderClient)
+    mockSendBidClient := new(MockBidderSendBidClient)
+
+    // Provide the mockSendBidClient instead of nil
+    mockBidder.On("SendBid", mock.Anything, "1000000000000000000", int64(100), int64(1000), int64(2000)).
+        Return(mockSendBidClient, errors.New("mock send bid error"))
+
+    _, err := mockBidder.SendBid([]string{"0xabc123"}, "1000000000000000000", 100, 1000, 2000)
+
+    require.Error(t, err, "Expected an error due to mock send bid error")
+    require.Contains(t, err.Error(), "mock send bid error", "Error message should contain 'mock send bid error'")
+}
