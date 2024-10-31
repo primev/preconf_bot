@@ -5,7 +5,6 @@ package mevcommit
 
 import (
 	"crypto/ecdsa"
-	"math/big"
 
 	pb "github.com/primev/preconf_blob_bidder/internal/bidderpb"
 	"google.golang.org/grpc"
@@ -16,11 +15,12 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"context"
+	"time"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 )
-
-const HOLESKY_CHAIN_ID = 1700
 
 // BidderConfig holds the configuration settings for the mev-commit bidder node.
 type BidderConfig struct {
@@ -94,7 +94,7 @@ func NewGethClient(endpoint string) (*ethclient.Client, error) {
 //
 // Returns:
 // - A pointer to an AuthAcct struct, or an error if authentication fails.
-func AuthenticateAddress(privateKeyHex string) (AuthAcct, error) {
+func AuthenticateAddress(privateKeyHex string, client *ethclient.Client) (AuthAcct, error) {
 	if privateKeyHex == "" {
 		return AuthAcct{}, nil
 	}
@@ -116,8 +116,15 @@ func AuthenticateAddress(privateKeyHex string) (AuthAcct, error) {
 	// Generate the Ethereum address from the public key
 	address := crypto.PubkeyToAddress(*publicKeyECDSA)
 
-	// Set the chain ID (currently hardcoded for Holesky testnet)
-	chainID := big.NewInt(HOLESKY_CHAIN_ID) // Holesky
+	// Set up a context with a 5-second timeout for fetching the chain ID
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel() // Ensure the context is canceled after the operation
+
+	chainID, err := client.ChainID(ctx)
+	if err != nil {
+		log.Crit("Failed to fetch chain ID", "err", err)
+		return AuthAcct{}, err
+	}
 
 	// Create the transaction options with the private key and chain ID
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)

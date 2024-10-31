@@ -143,11 +143,7 @@ func main() {
 				"stdDevPercentage", stdDevPercentage,
 			)
 
-			// Authenticate with private key
-			authAcct, err := bb.AuthenticateAddress(privateKeyHex)
-			if err != nil {
-				return fmt.Errorf("failed to authenticate private key: %w", err)
-			}
+
 
 			cfg := bb.BidderConfig{
 				ServerAddress: bidderAddress,
@@ -190,6 +186,12 @@ func main() {
 
 			// Timer set for 24 * 14 hours (336 hours)
 			timer := time.NewTimer(24 * 14 * time.Hour)
+
+			// Authenticate with private key
+			authAcct, err := bb.AuthenticateAddress(privateKeyHex, wsClient)
+			if err != nil {
+				return fmt.Errorf("failed to authenticate private key: %w", err)
+			}
 
 			for {
 				select {
