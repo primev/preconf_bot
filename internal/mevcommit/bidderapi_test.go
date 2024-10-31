@@ -2,13 +2,16 @@ package mevcommit
 
 import (
 	"context"
+	"errors"
 	"io"
 	"math/big"
 	"strings"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/core/types"
 	pb "github.com/primev/preconf_blob_bidder/internal/bidderpb"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -56,6 +59,18 @@ func (m *MockBidderSendBidClient) SendMsg(msg interface{}) error {
 
 func (m *MockBidderSendBidClient) RecvMsg(msg interface{}) error {
     return nil
+}
+
+// Define the custom mock transaction type outside of the test function
+type MockTransaction struct {
+    types.Transaction
+    mock.Mock
+}
+
+// Define the MarshalBinary method outside the test function
+func (m *MockTransaction) MarshalBinary() ([]byte, error) {
+    args := m.Called()
+    return args.Get(0).([]byte), args.Error(1)
 }
 
 func TestSendPreconfBid(t *testing.T) {
@@ -112,4 +127,95 @@ func TestUnsupportedInputType(t *testing.T) {
 
     // Assert that SendBid was not called
     mockBidder.AssertNotCalled(t, "SendBid", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestSendBidWithTxHashes(t *testing.T) {
+    // Initialize the mock Bidder client
+    mockBidder := new(MockBidderClient)
+    mockSendBidClient := new(MockBidderSendBidClient)
+
+	// Setup parameters for SendBid with txHashes
+	transactionHashes := []string{"0x1234567890abcdef", "0xfedcba0987654321"}
+
+	// Remove "0x" prefix from each transaction hash
+	for i, tx := range transactionHashes {
+		transactionHashes[i] = strings.TrimPrefix(tx, "0x")
+	}
+
+	expectedTxHashes := []string{"1234567890abcdef", "fedcba0987654321"}
+	expectedAmount := "1000000000000000000" // Example amount in wei
+	expectedBlockNumber := int64(100)
+	decayStart := int64(1000)
+	decayEnd := int64(2000)
+
+	// Setup expectations for SendBid
+	mockBidder.On("SendBid", expectedTxHashes, expectedAmount, expectedBlockNumber, decayStart, decayEnd).Return(mockSendBidClient, nil)
+
+	// Setup expectations for Recv to return io.EOF
+	mockSendBidClient.On("Recv").Return(nil, io.EOF)
+
+	// Call SendBid with []string input
+	response, err := mockBidder.SendBid(transactionHashes, expectedAmount, expectedBlockNumber, decayStart, decayEnd)
+	require.NoError(t, err)
+	require.NotNil(t, response)
+
+	// Call Recv to satisfy the expectation
+	_, err = mockSendBidClient.Recv()
+	require.ErrorIs(t, err, io.EOF) // Check that Recv() returns io.EOF as expected
+
+	// Verify expectations
+	mockBidder.AssertExpectations(t)
+	mockSendBidClient.AssertExpectations(t)
+}
+func TestSendBidUnsupportedInputType(t *testing.T) {
+    // Initialize the mock Bidder client and BidderSendBidClient
+    mockBidder := new(MockBidderClient)
+    mockSendBidClient := new(MockBidderSendBidClient)
+
+    // Set up SendBid mock to return mockSendBidClient with an error
+    mockBidder.On("SendBid", mock.AnythingOfType("int"), mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+        Return(mockSendBidClient, errors.New("unsupported input type"))
+
+    // Call SendBid with unsupported input type and verify the error
+    unsupportedInput := 12345
+    _, err := mockBidder.SendBid(unsupportedInput, "1000000000000000000", 100, 1000, 2000)
+
+    require.Error(t, err)
+    require.Contains(t, err.Error(), "unsupported input type")
+}
+
+
+func TestSendBidWithRawTransactions(t *testing.T) {
+    // Initialize the mock Bidder client and SendBid client
+    mockBidder := new(MockBidderClient)
+    mockSendBidClient := new(MockBidderSendBidClient)
+
+    t.Run("TestSendBidWithRawTransactions", func(t *testing.T) {
+        expectedAmount := "1000000000000000000" // Example amount in wei
+        expectedBlockNumber := int64(100)
+        decayStart := int64(1000)
+        decayEnd := int64(2000)
+
+        // Use *types.Transaction instead of MockTransaction to match SendBid function signature
+        tx := new(types.Transaction)
+
+        // Log to track the start of the test
+        t.Log("Starting TestSendBidWithRawTransactions")
+
+        // Set up expectation for SendBid to return mockSendBidClient and a marshalling error
+        mockBidder.On("SendBid", mock.Anything, expectedAmount, expectedBlockNumber, decayStart, decayEnd).
+            Return(mockSendBidClient, errors.New("mock marshalling error")).Once()
+
+        // Call SendBid with []*types.Transaction input
+        _, err := mockBidder.SendBid([]*types.Transaction{tx}, expectedAmount, expectedBlockNumber, decayStart, decayEnd)
+
+        // Validate the error and log result
+        require.Error(t, err, "Expected an error due to mock marshalling error")
+        require.Contains(t, err.Error(), "mock marshalling error", "Error message should contain 'mock marshalling error'")
+
+        // Verify expectations
+        mockBidder.AssertExpectations(t)
+
+        t.Log("TestSendBidWithRawTransactions completed")
+    })
 }
