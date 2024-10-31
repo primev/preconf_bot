@@ -184,9 +184,6 @@ func main() {
 				return fmt.Errorf("failed to subscribe to new blocks: %w", err)
 			}
 
-			// Timer set for 24 * 14 hours (336 hours)
-			timer := time.NewTimer(24 * 14 * time.Hour)
-
 			// Authenticate with private key
 			authAcct, err := bb.AuthenticateAddress(privateKeyHex, wsClient)
 			if err != nil {
@@ -195,9 +192,6 @@ func main() {
 
 			for {
 				select {
-				case <-timer.C:
-					log.Info("Stopping the loop.")
-					return nil
 				case err := <-sub.Err():
 					log.Warn("Subscription error", "err", err)
 					wsClient, sub = reconnectWSClient(wsEndpoint, headers)
