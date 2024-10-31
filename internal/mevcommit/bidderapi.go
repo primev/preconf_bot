@@ -16,8 +16,13 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// BidderInterface defines the methods that Bidder and MockBidderClient must implement.
+type BidderInterface interface {
+	SendBid(input interface{}, amount string, blockNumber, decayStart, decayEnd int64) (pb.Bidder_SendBidClient, error)
+}
+
 // SendPreconfBid sends a preconfirmation bid to the bidder client
-func SendPreconfBid(bidderClient *Bidder, input interface{}, blockNumber int64, randomEthAmount float64) {
+func SendPreconfBid(bidderClient BidderInterface, input interface{}, blockNumber int64, randomEthAmount float64) {
 	// Get current time in milliseconds
 	currentTime := time.Now().UnixMilli()
 
@@ -38,6 +43,7 @@ func SendPreconfBid(bidderClient *Bidder, input interface{}, blockNumber int64, 
 	amount := randomWeiAmount.String()
 
 	// Determine how to handle the input
+	var responseClient pb.Bidder_SendBidClient
 	var err error
 	switch v := input.(type) {
 	case string:
@@ -47,7 +53,7 @@ func SendPreconfBid(bidderClient *Bidder, input interface{}, blockNumber int64, 
 			Str("tx", txHash).
 			Msg("Sending bid with transaction hash")
 		// Send the bid with tx hash string
-		_, err = bidderClient.SendBid([]string{txHash}, amount, blockNumber, decayStart, decayEnd)
+		responseClient, err = bidderClient.SendBid([]string{txHash}, amount, blockNumber, decayStart, decayEnd)
 
 	case *types.Transaction:
 		// Input is a transaction object, send the transaction object
@@ -55,7 +61,7 @@ func SendPreconfBid(bidderClient *Bidder, input interface{}, blockNumber int64, 
 			Str("tx", v.Hash().String()).
 			Msg("Sending bid with transaction payload")
 		// Send the bid with the full transaction object
-		_, err = bidderClient.SendBid([]*types.Transaction{v}, amount, blockNumber, decayStart, decayEnd)
+		responseClient, err = bidderClient.SendBid([]*types.Transaction{v}, amount, blockNumber, decayStart, decayEnd)
 
 	default:
 		log.Warn().
@@ -63,18 +69,31 @@ func SendPreconfBid(bidderClient *Bidder, input interface{}, blockNumber int64, 
 		return
 	}
 
+	// Check if there was an error sending the bid
 	if err != nil {
 		log.Warn().
 			Err(err).
 			Msg("Failed to send bid")
+		return
+	}
+
+	// Call Recv() to handle the response and complete the expectation in your tests
+	_, recvErr := responseClient.Recv()
+	if recvErr == io.EOF {
+		log.Info().Msg("Bid response received: EOF")
+	} else if recvErr != nil {
+		log.Warn().Err(recvErr).Msg("Error receiving bid response")
 	} else {
 		log.Info().
 			Int64("block", blockNumber).
 			Float64("amount (ETH)", randomEthAmount).
-			Msg("Sent preconfirmation bid")
+			Msg("Sent preconfirmation bid and received response")
 	}
 }
 
+
+
+// SendBid method as defined earlier
 func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decayStart, decayEnd int64) (pb.Bidder_SendBidClient, error) {
 	// Prepare variables to hold transaction hashes or raw transactions
 	var txHashes []string
