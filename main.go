@@ -111,7 +111,7 @@ func main() {
 			offset := c.Uint64("offset")
 			bidAmount := c.Float64("bid-amount")
 			stdDevPercentage := c.Float64("bid-amount-std-dev-percentage")
-			numBlob := c.Uint("num-blob")
+			numBlob := c.Uint64("num-blob")
 
 			// Validate RPC_ENDPOINT if usePayload is false
 			if !usePayload && rpcEndpoint == "" {
