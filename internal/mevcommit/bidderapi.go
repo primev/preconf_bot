@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math/big"
 	"strings"
 	"time"
 
@@ -14,6 +15,58 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	pb "github.com/primev/preconf_blob_bidder/internal/bidderpb"
 )
+
+// sendPreconfBid sends a preconfirmation bid to the bidder client
+func SendPreconfBid(bidderClient *Bidder, input interface{}, blockNumber int64, randomEthAmount float64) {
+	// Get current time in milliseconds
+	currentTime := time.Now().UnixMilli()
+
+	// Define bid decay start and end
+	decayStart := currentTime
+	decayEnd := currentTime + int64(time.Duration(36*time.Second).Milliseconds()) // Bid decay is 36 seconds (2 blocks)
+
+	// Convert the random ETH amount to wei (1 ETH = 10^18 wei)
+	bigEthAmount := big.NewFloat(randomEthAmount)
+	weiPerEth := big.NewFloat(1e18)
+	bigWeiAmount := new(big.Float).Mul(bigEthAmount, weiPerEth)
+
+	// Convert big.Float to big.Int
+	randomWeiAmount := new(big.Int)
+	bigWeiAmount.Int(randomWeiAmount)
+
+	// Convert the amount to a string for the bidder
+	amount := randomWeiAmount.String()
+
+	// Determine how to handle the input
+	var err error
+	switch v := input.(type) {
+	case string:
+		// Input is a string, process it as a transaction hash
+		txHash := strings.TrimPrefix(v, "0x")
+		log.Info("Sending bid with transaction hash", "tx", txHash)
+		// Send the bid with tx hash string
+		_, err = bidderClient.SendBid([]string{txHash}, amount, blockNumber, decayStart, decayEnd)
+
+	case *types.Transaction:
+		// Input is a transaction object, send the transaction object
+		log.Info("Sending bid with transaction payload", "tx", v.Hash().String())
+		// Send the bid with the full transaction object
+		_, err = bidderClient.SendBid([]*types.Transaction{v}, amount, blockNumber, decayStart, decayEnd)
+
+	default:
+		log.Warn("Unsupported input type, must be string or *types.Transaction")
+		return
+	}
+
+	if err != nil {
+		log.Warn("Failed to send bid", "err", err)
+	} else {
+		log.Info("Sent preconfirmation bid",
+			"block", blockNumber,
+			"amount (ETH)", randomEthAmount,
+		)
+	}
+}
 
 func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decayStart, decayEnd int64) (pb.Bidder_SendBidClient, error) {
 	// Prepare variables to hold transaction hashes or raw transactions

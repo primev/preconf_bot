@@ -235,14 +235,14 @@ func main() {
 
 					if usePayload {
 						// If use-payload is true, send the transaction payload to mev-commit. Don't send bundle
-						sendPreconfBid(bidderClient, signedTx, int64(blockNumber), randomEthAmount)
+						bb.SendPreconfBid(bidderClient, signedTx, int64(blockNumber), randomEthAmount)
 					} else {
 						// Send as a flashbots bundle and send the preconf bid with the transaction hash
 						_, err = ee.SendBundle(rpcEndpoint, signedTx, blockNumber)
 						if err != nil {
 							log.Error("Failed to send transaction", "rpcEndpoint", bb.MaskEndpoint(rpcEndpoint), "error", err)
 						}
-						sendPreconfBid(bidderClient, signedTx.Hash().String(), int64(blockNumber), randomEthAmount)
+						bb.SendPreconfBid(bidderClient, signedTx.Hash().String(), int64(blockNumber), randomEthAmount)
 					}
 
 					// Handle ExecuteBlob error
@@ -263,57 +263,57 @@ func main() {
 
 
 
-// sendPreconfBid sends a preconfirmation bid to the bidder client
-func sendPreconfBid(bidderClient *bb.Bidder, input interface{}, blockNumber int64, randomEthAmount float64) {
-	// Get current time in milliseconds
-	currentTime := time.Now().UnixMilli()
+// // sendPreconfBid sends a preconfirmation bid to the bidder client
+// func sendPreconfBid(bidderClient *bb.Bidder, input interface{}, blockNumber int64, randomEthAmount float64) {
+// 	// Get current time in milliseconds
+// 	currentTime := time.Now().UnixMilli()
 
-	// Define bid decay start and end
-	decayStart := currentTime
-	decayEnd := currentTime + int64(time.Duration(36*time.Second).Milliseconds()) // Bid decay is 36 seconds (2 blocks)
+// 	// Define bid decay start and end
+// 	decayStart := currentTime
+// 	decayEnd := currentTime + int64(time.Duration(36*time.Second).Milliseconds()) // Bid decay is 36 seconds (2 blocks)
 
-	// Convert the random ETH amount to wei (1 ETH = 10^18 wei)
-	bigEthAmount := big.NewFloat(randomEthAmount)
-	weiPerEth := big.NewFloat(1e18)
-	bigWeiAmount := new(big.Float).Mul(bigEthAmount, weiPerEth)
+// 	// Convert the random ETH amount to wei (1 ETH = 10^18 wei)
+// 	bigEthAmount := big.NewFloat(randomEthAmount)
+// 	weiPerEth := big.NewFloat(1e18)
+// 	bigWeiAmount := new(big.Float).Mul(bigEthAmount, weiPerEth)
 
-	// Convert big.Float to big.Int
-	randomWeiAmount := new(big.Int)
-	bigWeiAmount.Int(randomWeiAmount)
+// 	// Convert big.Float to big.Int
+// 	randomWeiAmount := new(big.Int)
+// 	bigWeiAmount.Int(randomWeiAmount)
 
-	// Convert the amount to a string for the bidder
-	amount := randomWeiAmount.String()
+// 	// Convert the amount to a string for the bidder
+// 	amount := randomWeiAmount.String()
 
-	// Determine how to handle the input
-	var err error
-	switch v := input.(type) {
-	case string:
-		// Input is a string, process it as a transaction hash
-		txHash := strings.TrimPrefix(v, "0x")
-		log.Info("Sending bid with transaction hash", "tx", txHash)
-		// Send the bid with tx hash string
-		_, err = bidderClient.SendBid([]string{txHash}, amount, blockNumber, decayStart, decayEnd)
+// 	// Determine how to handle the input
+// 	var err error
+// 	switch v := input.(type) {
+// 	case string:
+// 		// Input is a string, process it as a transaction hash
+// 		txHash := strings.TrimPrefix(v, "0x")
+// 		log.Info("Sending bid with transaction hash", "tx", txHash)
+// 		// Send the bid with tx hash string
+// 		_, err = bidderClient.SendBid([]string{txHash}, amount, blockNumber, decayStart, decayEnd)
 
-	case *types.Transaction:
-		// Input is a transaction object, send the transaction object
-		log.Info("Sending bid with transaction payload", "tx", v.Hash().String())
-		// Send the bid with the full transaction object
-		_, err = bidderClient.SendBid([]*types.Transaction{v}, amount, blockNumber, decayStart, decayEnd)
+// 	case *types.Transaction:
+// 		// Input is a transaction object, send the transaction object
+// 		log.Info("Sending bid with transaction payload", "tx", v.Hash().String())
+// 		// Send the bid with the full transaction object
+// 		_, err = bidderClient.SendBid([]*types.Transaction{v}, amount, blockNumber, decayStart, decayEnd)
 
-	default:
-		log.Warn("Unsupported input type, must be string or *types.Transaction")
-		return
-	}
+// 	default:
+// 		log.Warn("Unsupported input type, must be string or *types.Transaction")
+// 		return
+// 	}
 
-	if err != nil {
-		log.Warn("Failed to send bid", "err", err)
-	} else {
-		log.Info("Sent preconfirmation bid",
-			"block", blockNumber,
-			"amount (ETH)", randomEthAmount,
-		)
-	}
-}
+// 	if err != nil {
+// 		log.Warn("Failed to send bid", "err", err)
+// 	} else {
+// 		log.Info("Sent preconfirmation bid",
+// 			"block", blockNumber,
+// 			"amount (ETH)", randomEthAmount,
+// 		)
+// 	}
+// }
 
 // loadEnvFile loads the specified .env file into the environment variables
 func loadEnvFile(filename string) error {
