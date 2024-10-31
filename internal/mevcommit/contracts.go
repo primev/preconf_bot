@@ -19,13 +19,77 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-// Contract addresses used within the mev-commit protocol.
-const (
-	// latest contracts as of v0.6.1
-	bidderRegistryAddress = "0x401B3287364f95694c43ACA3252831cAc02e5C41"
-	blockTrackerAddress   = "0x7538F3AaA07dA1990486De21A0B438F55e9639e4"
-	PreconfManagerAddress = "0x9433bCD9e89F923ce587f7FA7E39e120E93eb84D"
+var (
+    BidderRegistryAddress common.Address
+    BlockTrackerAddress   common.Address
+    PreconfManagerAddress common.Address
 )
+
+func init() {
+    // Load custom environment file if specified, otherwise default to .env
+    envFile := os.Getenv("ENV_FILE")
+    if envFile == "" {
+        envFile = ".env" // default to .env if ENV_FILE is not set
+    }
+
+		if envFile == "" {
+			envFile = ".env"
+		}
+		if _, err := os.Stat(envFile); err == nil {
+			if err := loadEnvFile(envFile); err != nil {
+				fmt.Fprintf(os.Stderr, "Error loading .env file: %v\n", err)
+				os.Exit(1)
+			}
+		}
+		
+		// Read environment variables with default values
+		bidderRegistry := os.Getenv("BIDDER_REGISTRY_ADDRESS")
+		if bidderRegistry == "" {
+			bidderRegistry = "0x401B3287364f95694c43ACA3252831cAc02e5C41"
+		}
+		BidderRegistryAddress = common.HexToAddress(bidderRegistry)
+
+		blockTracker := os.Getenv("BLOCK_TRACKER_ADDRESS")
+		if blockTracker == "" {
+			blockTracker = "0x7538F3AaA07dA1990486De21A0B438F55e9639e4"
+		}
+		BlockTrackerAddress = common.HexToAddress(blockTracker)
+
+		preconfManager := os.Getenv("PRECONF_MANAGER_ADDRESS")
+		if preconfManager == "" {
+			preconfManager = "0x9433bCD9e89F923ce587f7FA7E39e120E93eb84D"
+		}
+		PreconfManagerAddress = common.HexToAddress(preconfManager)
+	
+		// log.info loaded contract addresses:
+		log.Printf("Loaded contract addresses: BidderRegistry=%s, BlockTracker=%s, PreconfManager=%s\n", BidderRegistryAddress.Hex(), BlockTrackerAddress.Hex(), PreconfManagerAddress.Hex())
+
+	}
+	
+	// loadEnvFile loads environment variables from a specified file.
+	func loadEnvFile(filePath string) error {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return err
+		}
+	
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			os.Setenv(key, value)
+		}
+	
+		return nil
+	}
+
 
 const defaultTimeout = 15 * time.Second 
 
@@ -86,7 +150,7 @@ func WindowHeight(client *ethclient.Client) (*big.Int, error) {
 	}
 
 	// Bind the contract to the client
-	blockTrackerContract := bind.NewBoundContract(common.HexToAddress(blockTrackerAddress), blockTrackerABI, client, client, client)
+	blockTrackerContract := bind.NewBoundContract(BlockTrackerAddress, blockTrackerABI, client, client, client)
 
 	// Call the getCurrentWindow function to retrieve the current window height
 	var currentWindowResult []interface{}
@@ -121,7 +185,7 @@ func GetMinDeposit(client *ethclient.Client) (*big.Int, error) {
 	}
 
 	// Bind the contract to the client
-	bidderRegistryContract := bind.NewBoundContract(common.HexToAddress(bidderRegistryAddress), bidderRegistryABI, client, client, client)
+	bidderRegistryContract := bind.NewBoundContract(BidderRegistryAddress, bidderRegistryABI, client, client, client)
 
 	// Call the minDeposit function to get the minimum deposit amount
 	var minDepositResult []interface{}
@@ -156,7 +220,7 @@ func DepositIntoWindow(client *ethclient.Client, depositWindow *big.Int, authAcc
 	}
 
 	// Bind the contract to the client
-	bidderRegistryContract := bind.NewBoundContract(common.HexToAddress(bidderRegistryAddress), bidderRegistryABI, client, client, client)
+	bidderRegistryContract := bind.NewBoundContract(BidderRegistryAddress, bidderRegistryABI, client, client, client)
 
 	// Retrieve the minimum deposit amount
 	minDeposit, err := GetMinDeposit(client)
@@ -207,7 +271,7 @@ func GetDepositAmount(client *ethclient.Client, address common.Address, window b
 	}
 
 	// Bind the contract to the client
-	bidderRegistryContract := bind.NewBoundContract(common.HexToAddress(bidderRegistryAddress), bidderRegistryABI, client, client, client)
+	bidderRegistryContract := bind.NewBoundContract(BidderRegistryAddress, bidderRegistryABI, client, client, client)
 
 	// Call the getDeposit function to retrieve the deposit amount
 	var depositResult []interface{}
@@ -242,7 +306,7 @@ func WithdrawFromWindow(client *ethclient.Client, authAcct *AuthAcct, window *bi
 	}
 
 	// Bind the contract to the client
-	bidderRegistryContract := bind.NewBoundContract(common.HexToAddress(bidderRegistryAddress), bidderRegistryABI, client, client, client)
+	bidderRegistryContract := bind.NewBoundContract(BidderRegistryAddress, bidderRegistryABI, client, client, client)
 
 	// Prepare the withdrawal transaction
 	withdrawalTx, err := bidderRegistryContract.Transact(authAcct.Auth, "withdrawBidderAmountFromWindow", authAcct.Address, window)
@@ -297,7 +361,7 @@ func ListenForCommitmentStoredEvent(client *ethclient.Client) {
 			log.Fatalf("Error with header subscription: %v", err)
 		case header := <-headers:
 			query := ethereum.FilterQuery{
-				Addresses: []common.Address{common.HexToAddress(PreconfManagerAddress)},
+				Addresses: []common.Address{PreconfManagerAddress},
 				FromBlock: header.Number,
 				ToBlock:   header.Number,
 			}
@@ -316,7 +380,6 @@ func ListenForCommitmentStoredEvent(client *ethclient.Client) {
 				select {
 				case err := <-subLogs.Err():
 					log.Printf("Error with log subscription: %v", err)
-					break
 				case vLog := <-logs:
 					var event CommitmentStoredEvent
 

@@ -42,23 +42,6 @@ func main() {
 	app := &cli.App{
 		Name:  "Preconf Bidder",
 		Usage: "A tool for bidding in mev-commit preconfirmation auctions for blobs and transactions",
-		// Before: func(c *cli.Context) error {
-			// // Load the .env file before flags are parsed
-			// envFile := c.String("env")
-			// if envFile != "" {
-			// 	if err := loadEnvFile(envFile); err != nil {
-			// 		return fmt.Errorf("error loading .env file: %w", err)
-			// 	}
-			// } else {
-			// 	// Optionally load default .env
-			// 	if _, err := os.Stat(".env"); err == nil {
-			// 		if err := loadEnvFile(".env"); err != nil {
-			// 			return fmt.Errorf("error loading default .env file: %w", err)
-			// 		}
-			// 	}
-			// }
-			// return nil
-		// },
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "env",
