@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/log"
 	pb "github.com/primev/preconf_blob_bidder/internal/bidderpb"
+	"github.com/rs/zerolog/log"
 )
 
-// sendPreconfBid sends a preconfirmation bid to the bidder client
+// SendPreconfBid sends a preconfirmation bid to the bidder client
 func SendPreconfBid(bidderClient *Bidder, input interface{}, blockNumber int64, randomEthAmount float64) {
 	// Get current time in milliseconds
 	currentTime := time.Now().UnixMilli()
@@ -43,28 +43,35 @@ func SendPreconfBid(bidderClient *Bidder, input interface{}, blockNumber int64, 
 	case string:
 		// Input is a string, process it as a transaction hash
 		txHash := strings.TrimPrefix(v, "0x")
-		log.Info("Sending bid with transaction hash", "tx", txHash)
+		log.Info().
+			Str("tx", txHash).
+			Msg("Sending bid with transaction hash")
 		// Send the bid with tx hash string
 		_, err = bidderClient.SendBid([]string{txHash}, amount, blockNumber, decayStart, decayEnd)
 
 	case *types.Transaction:
 		// Input is a transaction object, send the transaction object
-		log.Info("Sending bid with transaction payload", "tx", v.Hash().String())
+		log.Info().
+			Str("tx", v.Hash().String()).
+			Msg("Sending bid with transaction payload")
 		// Send the bid with the full transaction object
 		_, err = bidderClient.SendBid([]*types.Transaction{v}, amount, blockNumber, decayStart, decayEnd)
 
 	default:
-		log.Warn("Unsupported input type, must be string or *types.Transaction")
+		log.Warn().
+			Msg("Unsupported input type, must be string or *types.Transaction")
 		return
 	}
 
 	if err != nil {
-		log.Warn("Failed to send bid", "err", err)
+		log.Warn().
+			Err(err).
+			Msg("Failed to send bid")
 	} else {
-		log.Info("Sent preconfirmation bid",
-			"block", blockNumber,
-			"amount (ETH)", randomEthAmount,
-		)
+		log.Info().
+			Int64("block", blockNumber).
+			Float64("amount (ETH)", randomEthAmount).
+			Msg("Sent preconfirmation bid")
 	}
 }
 
@@ -87,13 +94,17 @@ func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decaySta
 		for i, tx := range v {
 			rlpEncodedTx, err := tx.MarshalBinary()
 			if err != nil {
-				log.Error("Failed to marshal transaction to raw format", "error", err)
+				log.Error().
+					Err(err).
+					Msg("Failed to marshal transaction to raw format")
 				return nil, fmt.Errorf("failed to marshal transaction: %w", err)
 			}
 			rawTransactions[i] = hex.EncodeToString(rlpEncodedTx)
 		}
 	default:
-		log.Warn("Unsupported input type, must be []string or []*types.Transaction")
+		log.Warn().
+			Str("inputType", fmt.Sprintf("%T", input)).
+			Msg("Unsupported input type, must be []string or []*types.Transaction")
 		return nil, fmt.Errorf("unsupported input type: %T", input)
 	}
 
@@ -108,12 +119,7 @@ func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decaySta
 	if len(txHashes) > 0 {
 		bidRequest.TxHashes = txHashes
 	} else if len(rawTransactions) > 0 {
-		// Convert rawTransactions to []string
-		rawTxStrings := make([]string, len(rawTransactions))
-		for i, rawTx := range rawTransactions {
-			rawTxStrings[i] = string(rawTx)
-		}
-		bidRequest.RawTransactions = rawTxStrings
+		bidRequest.RawTransactions = rawTransactions
 	}
 
 	ctx := context.Background()
@@ -121,7 +127,9 @@ func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decaySta
 	// Send the bid request to the mev-commit client
 	response, err := b.client.SendBid(ctx, bidRequest)
 	if err != nil {
-		log.Error("Failed to send bid", "error", err)
+		log.Error().
+			Err(err).
+			Msg("Failed to send bid")
 		return nil, fmt.Errorf("failed to send bid: %w", err)
 	}
 
@@ -133,15 +141,22 @@ func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decaySta
 			break
 		}
 		if err != nil {
-			log.Error("Failed to receive bid response", "error", err)
+			log.Error().
+				Err(err).
+				Msg("Failed to receive bid response")
+			continue
 		}
 
-		log.Info("Bid accepted", "commitment details", msg)
+		log.Info().
+			Interface("commitmentDetails", msg).
+			Msg("Bid accepted")
 	}
 
 	// Timer before saving bid responses
 	startTimeBeforeSaveResponses := time.Now()
-	log.Info("End Time", "time", startTimeBeforeSaveResponses)
+	log.Info().
+		Time("time", startTimeBeforeSaveResponses).
+		Msg("End Time")
 
 	return response, nil
 }

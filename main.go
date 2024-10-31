@@ -11,9 +11,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/log"
 	ee "github.com/primev/preconf_blob_bidder/internal/eth"
 	bb "github.com/primev/preconf_blob_bidder/internal/mevcommit"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
 )
 
@@ -30,10 +31,8 @@ func main() {
 		}
 	}
 
-	// Set up logging
-	glogger := log.NewGlogHandler(log.NewTerminalHandler(os.Stderr, true))
-	glogger.Verbosity(log.LevelInfo)
-	log.SetDefault(log.NewLogger(glogger))
+    zerolog.SetGlobalLevel(zerolog.InfoLevel)
+    log.Logger = log.Output(os.Stderr).With().Timestamp().Logger()
 
 	app := &cli.App{
 		Name:  "Preconf Bidder",
@@ -118,17 +117,17 @@ func main() {
 				return fmt.Errorf("RPC_ENDPOINT is required when USE_PAYLOAD is false")
 			}
 
-			// Log configuration values (excluding sensitive data)
-			log.Info("Configuration values",
-				"bidderAddress", bidderAddress,
-				"rpcEndpoint", bb.MaskEndpoint(rpcEndpoint),
-				"wsEndpoint", bb.MaskEndpoint(wsEndpoint),
-				"offset", offset,
-				"usePayload", usePayload,
-				"bidAmount", bidAmount,
-				"stdDevPercentage", stdDevPercentage,
-				"numBlob", numBlob,
-			)
+			log.Info().
+				Str("bidderAddress", bidderAddress).
+				Str("rpcEndpoint", bb.MaskEndpoint(rpcEndpoint)).
+				Str("wsEndpoint", bb.MaskEndpoint(wsEndpoint)).
+				Uint64("offset", offset).
+				Bool("usePayload", usePayload).
+				Float64("bidAmount", bidAmount).
+				Float64("stdDevPercentage", stdDevPercentage).
+				Uint64("numBlob", numBlob).
+				Bool("privateKeyProvided", privateKeyHex != "").
+				Msg("Configuration values")
 
 			cfg := bb.BidderConfig{
 				ServerAddress: bidderAddress,
@@ -141,7 +140,7 @@ func main() {
 				return fmt.Errorf("failed to connect to mev-commit bidder API: %w", err)
 			}
 
-			log.Info("Connected to mev-commit client")
+			log.Info().Msg("Connected to mev-commit client")
 
 			timeout := 30 * time.Second
 
@@ -150,9 +149,13 @@ func main() {
 			if !usePayload {
 				rpcClient = bb.ConnectRPCClientWithRetries(rpcEndpoint, 5, timeout)
 				if rpcClient == nil {
-					log.Error("Failed to connect to RPC client", "rpcEndpoint", bb.MaskEndpoint(rpcEndpoint))
+					log.Error().
+						Str("rpcEndpoint", bb.MaskEndpoint(rpcEndpoint)).
+						Msg("Failed to connect to RPC client")
 				} else {
-					log.Info("(rpc) Geth client connected", "endpoint", bb.MaskEndpoint(rpcEndpoint))
+					log.Info().
+						Str("endpoint", bb.MaskEndpoint(rpcEndpoint)).
+						Msg("(rpc) Geth client connected")
 				}
 			}
 
@@ -161,7 +164,9 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("failed to connect to WebSocket client: %w", err)
 			}
-			log.Info("(ws) Geth client connected", "endpoint", bb.MaskEndpoint(wsEndpoint))
+			log.Info().
+				Str("endpoint", bb.MaskEndpoint(wsEndpoint)).
+				Msg("(ws) Geth client connected")
 
 			headers := make(chan *types.Header)
 			sub, err := wsClient.SubscribeNewHead(context.Background(), headers)
@@ -178,7 +183,9 @@ func main() {
 			for {
 				select {
 				case err := <-sub.Err():
-					log.Warn("Subscription error", "err", err)
+					log.Warn().
+						Err(err).
+						Msg("Subscription error")
 					wsClient, sub = bb.ReconnectWSClient(wsEndpoint, headers)
 					continue
 				case header := <-headers:
@@ -194,21 +201,23 @@ func main() {
 					}
 
 					if signedTx == nil {
-						log.Error("Transaction was not signed or created.")
+						log.Error().Msg("Transaction was not signed or created.")
 					} else {
-						log.Info("Transaction sent successfully")
+						log.Info().Msg("Transaction sent successfully")
 					}
 
 					// Check for errors before using signedTx
 					if err != nil {
-						log.Error("Failed to execute transaction", "err", err)
+						log.Error().
+							Err(err).
+							Msg("Failed to execute transaction")
 					}
 
-					log.Info("New block received",
-						"blockNumber", header.Number,
-						"timestamp", header.Time,
-						"hash", header.Hash().String(),
-					)
+					log.Info().
+						Uint64("blockNumber", header.Number.Uint64()).
+						Uint64("timestamp", header.Time).
+						Str("hash", header.Hash().String()).
+						Msg("New block received")
 
 					// Compute standard deviation in ETH
 					stdDev := bidAmount * stdDevPercentage / 100.0
@@ -232,14 +241,19 @@ func main() {
 						// Send as a flashbots bundle and send the preconf bid with the transaction hash
 						_, err = ee.SendBundle(rpcEndpoint, signedTx, blockNumber)
 						if err != nil {
-							log.Error("Failed to send transaction", "rpcEndpoint", bb.MaskEndpoint(rpcEndpoint), "error", err)
+							log.Error().
+								Str("rpcEndpoint", bb.MaskEndpoint(rpcEndpoint)).
+								Err(err).
+								Msg("Failed to send transaction")
 						}
 						bb.SendPreconfBid(bidderClient, signedTx.Hash().String(), int64(blockNumber), randomEthAmount)
 					}
 
 					// Handle ExecuteBlob error
 					if err != nil {
-						log.Error("Failed to execute transaction", "err", err)
+						log.Error().
+							Err(err).
+							Msg("Failed to execute transaction")
 						continue // Skip to the next iteration
 					}
 				}
@@ -249,7 +263,9 @@ func main() {
 
 	// Run the app
 	if err := app.Run(os.Args); err != nil {
-		log.Crit("Application error", "err", err)
+		log.Fatal().
+			Err(err).
+			Msg("Application error")
 	}
 }
 
