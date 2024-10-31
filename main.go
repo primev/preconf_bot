@@ -3,14 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/big"
 	"math/rand"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
@@ -135,8 +133,8 @@ func main() {
 			// Log configuration values (excluding sensitive data)
 			log.Info("Configuration values",
 				"bidderAddress", bidderAddress,
-				"rpcEndpoint", maskEndpoint(rpcEndpoint),
-				"wsEndpoint", maskEndpoint(wsEndpoint),
+				"rpcEndpoint", bb.MaskEndpoint(rpcEndpoint),
+				"wsEndpoint", bb.MaskEndpoint(wsEndpoint),
 				"offset", offset,
 				"usePayload", usePayload,
 				"bidAmount", bidAmount,
@@ -163,20 +161,20 @@ func main() {
 			// Only connect to the RPC client if usePayload is false
 			var rpcClient *ethclient.Client
 			if !usePayload {
-				rpcClient = connectRPCClientWithRetries(rpcEndpoint, 5, timeout)
+				rpcClient = bb.ConnectRPCClientWithRetries(rpcEndpoint, 5, timeout)
 				if rpcClient == nil {
-					log.Error("Failed to connect to RPC client", "rpcEndpoint", maskEndpoint(rpcEndpoint))
+					log.Error("Failed to connect to RPC client", "rpcEndpoint", bb.MaskEndpoint(rpcEndpoint))
 				} else {
-					log.Info("(rpc) Geth client connected", "endpoint", maskEndpoint(rpcEndpoint))
+					log.Info("(rpc) Geth client connected", "endpoint", bb.MaskEndpoint(rpcEndpoint))
 				}
 			}
 
 			// Connect to WS client
-			wsClient, err := connectWSClient(wsEndpoint)
+			wsClient, err := bb.ConnectWSClient(wsEndpoint)
 			if err != nil {
 				return fmt.Errorf("failed to connect to WebSocket client: %w", err)
 			}
-			log.Info("(ws) Geth client connected", "endpoint", maskEndpoint(wsEndpoint))
+			log.Info("(ws) Geth client connected", "endpoint", bb.MaskEndpoint(wsEndpoint))
 
 			headers := make(chan *types.Header)
 			sub, err := wsClient.SubscribeNewHead(context.Background(), headers)
@@ -194,7 +192,7 @@ func main() {
 				select {
 				case err := <-sub.Err():
 					log.Warn("Subscription error", "err", err)
-					wsClient, sub = reconnectWSClient(wsEndpoint, headers)
+					wsClient, sub = bb.ReconnectWSClient(wsEndpoint, headers)
 					continue
 				case header := <-headers:
 					var signedTx *types.Transaction
@@ -242,7 +240,7 @@ func main() {
 						// Send as a flashbots bundle and send the preconf bid with the transaction hash
 						_, err = ee.SendBundle(rpcEndpoint, signedTx, blockNumber)
 						if err != nil {
-							log.Error("Failed to send transaction", "rpcEndpoint", maskEndpoint(rpcEndpoint), "error", err)
+							log.Error("Failed to send transaction", "rpcEndpoint", bb.MaskEndpoint(rpcEndpoint), "error", err)
 						}
 						sendPreconfBid(bidderClient, signedTx.Hash().String(), int64(blockNumber), randomEthAmount)
 					}
@@ -263,75 +261,7 @@ func main() {
 	}
 }
 
-// maskEndpoint masks sensitive parts of the endpoint URLs
-func maskEndpoint(endpoint string) string {
-	if len(endpoint) > 10 {
-		return endpoint[:10] + "*****"
-	}
-	return "*****"
-}
 
-// connectRPCClientWithRetries attempts to connect to the RPC client with retries and exponential backoff
-func connectRPCClientWithRetries(rpcEndpoint string, maxRetries int, timeout time.Duration) *ethclient.Client {
-	var rpcClient *ethclient.Client
-	var err error
-
-	for i := 0; i < maxRetries; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-
-		rpcClient, err = ethclient.DialContext(ctx, rpcEndpoint)
-		if err == nil {
-			return rpcClient
-		}
-
-		log.Warn("Failed to connect to RPC client, retrying...",
-			"attempt", i+1,
-			"err", err,
-		)
-		time.Sleep(10 * time.Duration(math.Pow(2, float64(i))) * time.Second) // Exponential backoff
-	}
-
-	log.Error("Failed to connect to RPC client after retries", "err", err)
-	return nil
-}
-
-// connectWSClient attempts to connect to the WebSocket client with continuous retries
-func connectWSClient(wsEndpoint string) (*ethclient.Client, error) {
-	for {
-		wsClient, err := bb.NewGethClient(wsEndpoint)
-		if err == nil {
-			return wsClient, nil
-		}
-		log.Warn("Failed to connect to WebSocket client", "err", err)
-		time.Sleep(10 * time.Second)
-	}
-}
-
-// reconnectWSClient attempts to reconnect to the WebSocket client with limited retries
-func reconnectWSClient(wsEndpoint string, headers chan *types.Header) (*ethclient.Client, ethereum.Subscription) {
-	var wsClient *ethclient.Client
-	var sub ethereum.Subscription
-	var err error
-
-	for i := 0; i < 10; i++ { // Retry logic for WebSocket connection
-		wsClient, err = connectWSClient(wsEndpoint)
-		if err == nil {
-			log.Info("(ws) Geth client reconnected", "endpoint", maskEndpoint(wsEndpoint))
-			sub, err = wsClient.SubscribeNewHead(context.Background(), headers)
-			if err == nil {
-				return wsClient, sub
-			}
-		}
-		log.Warn("Failed to reconnect WebSocket client, retrying...",
-			"attempt", i+1,
-			"err", err,
-		)
-		time.Sleep(5 * time.Second)
-	}
-	log.Crit("Failed to reconnect WebSocket client after retries", "err", err)
-	return nil, nil
-}
 
 // sendPreconfBid sends a preconfirmation bid to the bidder client
 func sendPreconfBid(bidderClient *bb.Bidder, input interface{}, blockNumber int64, randomEthAmount float64) {

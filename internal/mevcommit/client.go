@@ -5,10 +5,13 @@ package mevcommit
 
 import (
 	"crypto/ecdsa"
+	"math"
 
 	pb "github.com/primev/preconf_blob_bidder/internal/bidderpb"
 	"google.golang.org/grpc"
 
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
@@ -139,4 +142,74 @@ func AuthenticateAddress(privateKeyHex string, client *ethclient.Client) (AuthAc
 		Address:    address,
 		Auth:       auth,
 	}, nil
+}
+
+// ConnectRPCClientWithRetries attempts to connect to the RPC client with retries and exponential backoff
+func ConnectRPCClientWithRetries(rpcEndpoint string, maxRetries int, timeout time.Duration) *ethclient.Client {
+	var rpcClient *ethclient.Client
+	var err error
+
+	for i := 0; i < maxRetries; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		rpcClient, err = ethclient.DialContext(ctx, rpcEndpoint)
+		if err == nil {
+			return rpcClient
+		}
+
+		log.Warn("Failed to connect to RPC client, retrying...",
+			"attempt", i+1,
+			"err", err,
+		)
+		time.Sleep(10 * time.Duration(math.Pow(2, float64(i))) * time.Second) // Exponential backoff
+	}
+
+	log.Error("Failed to connect to RPC client after retries", "err", err)
+	return nil
+}
+
+// ConnectWSClient attempts to connect to the WebSocket client with continuous retries
+func ConnectWSClient(wsEndpoint string) (*ethclient.Client, error) {
+	for {
+		wsClient, err := NewGethClient(wsEndpoint)
+		if err == nil {
+			return wsClient, nil
+		}
+		log.Warn("Failed to connect to WebSocket client", "err", err)
+		time.Sleep(10 * time.Second)
+	}
+}
+
+// ReconnectWSClient attempts to reconnect to the WebSocket client with limited retries
+func ReconnectWSClient(wsEndpoint string, headers chan *types.Header) (*ethclient.Client, ethereum.Subscription) {
+	var wsClient *ethclient.Client
+	var sub ethereum.Subscription
+	var err error
+
+	for i := 0; i < 10; i++ { // Retry logic for WebSocket connection
+		wsClient, err = ConnectWSClient(wsEndpoint)
+		if err == nil {
+			log.Info("(ws) Geth client reconnected", "endpoint", MaskEndpoint(wsEndpoint))
+			sub, err = wsClient.SubscribeNewHead(context.Background(), headers)
+			if err == nil {
+				return wsClient, sub
+			}
+		}
+		log.Warn("Failed to reconnect WebSocket client, retrying...",
+			"attempt", i+1,
+			"err", err,
+		)
+		time.Sleep(5 * time.Second)
+	}
+	log.Crit("Failed to reconnect WebSocket client after retries", "err", err)
+	return nil, nil
+}
+
+// MaskEndpoint masks sensitive parts of the endpoint URLs
+func MaskEndpoint(endpoint string) string {
+	if len(endpoint) > 10 {
+		return endpoint[:10] + "*****"
+	}
+	return "*****"
 }
