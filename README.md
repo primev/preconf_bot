@@ -37,3 +37,6 @@ Build the docker with `sudo docker-compose up --build`. Best run with the unoffi
 
 ## Linting
 Run linting with `golangci-lint run ./...` inside the repository folder
+
+## Testing
+Run `go test -v ./...` in the main folder directory to run all the tests.
