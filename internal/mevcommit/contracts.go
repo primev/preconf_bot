@@ -368,10 +368,10 @@ func ListenForCommitmentStoredEvent(client *ethclient.Client) {
 
 			logs := make(chan types.Log)
 			ctxLogs, cancelLogs := context.WithTimeout(context.Background(), defaultTimeout)
-			defer cancelLogs()
 			subLogs, err := client.SubscribeFilterLogs(ctxLogs, query, logs)
 			if err != nil {
 				log.Printf("Failed to subscribe to logs: %v", err)
+				cancelLogs()
 				continue
 			}
 
