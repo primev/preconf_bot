@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 
-	// Added for defaultTimeout
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/rs/zerolog/log"

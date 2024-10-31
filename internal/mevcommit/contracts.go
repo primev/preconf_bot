@@ -422,97 +422,108 @@ func WithdrawFromWindow(client *ethclient.Client, authAcct *AuthAcct, window *bi
 //
 // Note: The event listener uses a timeout of 15 seconds for subscription.
 func ListenForCommitmentStoredEvent(client *ethclient.Client) {
-	// Load the PreConfCommitmentStore contract ABI
-	contractAbi, err := LoadABI("abi/PreConfCommitmentStore.abi")
-	if err != nil {
-		log.Fatal().
-			Err(err).
-			Str("contract", "PreConfCommitmentStore").
-			Msg("Failed to load contract ABI")
-	}
+    // Load the PreConfCommitmentStore contract ABI
+    contractAbi, err := LoadABI("abi/PreConfCommitmentStore.abi")
+    if err != nil {
+        log.Fatal().
+            Err(err).
+            Str("contract", "PreConfCommitmentStore").
+            Msg("Failed to load contract ABI")
+    }
 
-	// Subscribe to new block headers
-	headers := make(chan *types.Header)
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-	defer cancel()
-	sub, err := client.SubscribeNewHead(ctx, headers)
-	if err != nil {
-		log.Fatal().
-			Err(err).
-			Msg("Failed to subscribe to new block headers")
-	}
+    // Create a parent context that can be canceled to stop all operations
+    parentCtx, parentCancel := context.WithCancel(context.Background())
+    defer parentCancel()
 
-	log.Info().
-		Msg("Subscribed to new block headers for CommitmentStored events")
+    // Subscribe to new block headers
+    headers := make(chan *types.Header)
+    sub, err := client.SubscribeNewHead(parentCtx, headers)
+    if err != nil {
+        log.Fatal().
+            Err(err).
+            Msg("Failed to subscribe to new block headers")
+    }
 
-	// Listen for new block headers and filter logs for the CommitmentStored event
-	for {
-		select {
-		case err := <-sub.Err():
-			log.Error().
-				Err(err).
-				Msg("Error with header subscription")
-			return
+    log.Info().
+        Msg("Subscribed to new block headers for CommitmentStored events")
 
-		case header := <-headers:
-			query := ethereum.FilterQuery{
-				Addresses: []common.Address{PreconfManagerAddress},
-				FromBlock: header.Number,
-				ToBlock:   header.Number,
-			}
+    // Listen for new block headers and filter logs for the CommitmentStored event
+    for {
+        select {
+        case err := <-sub.Err():
+            log.Error().
+                Err(err).
+                Msg("Error with header subscription")
+            // Cancel the parent context to terminate all ongoing log subscriptions
+            parentCancel()
+            return
 
-			logs := make(chan types.Log)
-			ctxLogs, cancelLogs := context.WithTimeout(context.Background(), defaultTimeout)
-			subLogs, err := client.SubscribeFilterLogs(ctxLogs, query, logs)
-			if err != nil {
-				log.Error().
-					Err(err).
-					Msg("Failed to subscribe to logs")
-				cancelLogs()
-				continue
-			}
+        case header := <-headers:
+            query := ethereum.FilterQuery{
+                Addresses: []common.Address{PreconfManagerAddress},
+                FromBlock: header.Number,
+                ToBlock:   header.Number,
+            }
 
-			// Process incoming logs
-			go func() {
-				for {
-					select {
-					case err := <-subLogs.Err():
-						log.Error().
-							Err(err).
-							Msg("Error with log subscription")
-						return
-					case vLog := <-logs:
-						var event CommitmentStoredEvent
+            logs := make(chan types.Log)
+            ctxLogs, cancelLogs := context.WithTimeout(parentCtx, defaultTimeout)
+            
+            // Subscribe to filter logs with the derived context
+            subLogs, err := client.SubscribeFilterLogs(ctxLogs, query, logs)
+            if err != nil {
+                log.Error().
+                    Err(err).
+                    Msg("Failed to subscribe to logs")
+                // Ensure cancelLogs is called to release resources
+                cancelLogs()
+                continue
+            }
 
-						// Unpack the log data into the CommitmentStoredEvent struct
-						err := contractAbi.UnpackIntoInterface(&event, "CommitmentStored", vLog.Data)
-						if err != nil {
-							log.Error().
-								Err(err).
-								Msg("Failed to unpack log data")
-							continue
-						}
+            // Process incoming logs in a separate goroutine
+            go func() {
+                // Ensure cancelLogs is called when the goroutine exits
+                defer cancelLogs()
 
-						// Log event details
-						log.Info().
-							Str("commitment_index", fmt.Sprintf("%x", event.CommitmentIndex)).
-							Str("bidder", event.Bidder.Hex()).
-							Str("commiter", event.Commiter.Hex()).
-							Uint64("bid", event.Bid).
-							Uint64("block_number", event.BlockNumber).
-							Str("bid_hash", fmt.Sprintf("%x", event.BidHash)).
-							Uint64("decay_start_timestamp", event.DecayStartTimeStamp).
-							Uint64("decay_end_timestamp", event.DecayEndTimeStamp).
-							Str("txn_hash", event.TxnHash).
-							Str("commitment_hash", fmt.Sprintf("%x", event.CommitmentHash)).
-							Str("bid_signature", fmt.Sprintf("%x", event.BidSignature)).
-							Str("commitment_signature", fmt.Sprintf("%x", event.CommitmentSignature)).
-							Uint64("dispatch_timestamp", event.DispatchTimestamp).
-							Str("shared_secret_key", fmt.Sprintf("%x", event.SharedSecretKey)).
-							Msg("CommitmentStored Event Detected")
-					}
-				}
-			}()
-		}
-	}
+                for {
+                    select {
+                    case err := <-subLogs.Err():
+                        log.Error().
+                            Err(err).
+                            Msg("Error with log subscription")
+                        return
+
+                    case vLog := <-logs:
+                        var event CommitmentStoredEvent
+
+                        // Unpack the log data into the CommitmentStoredEvent struct
+                        err := contractAbi.UnpackIntoInterface(&event, "CommitmentStored", vLog.Data)
+                        if err != nil {
+                            log.Error().
+                                Err(err).
+                                Msg("Failed to unpack log data")
+                            continue
+                        }
+
+                        // Log event details
+                        log.Info().
+                            Str("commitment_index", fmt.Sprintf("%x", event.CommitmentIndex)).
+                            Str("bidder", event.Bidder.Hex()).
+                            Str("commiter", event.Commiter.Hex()).
+                            Uint64("bid", event.Bid).
+                            Uint64("block_number", event.BlockNumber).
+                            Str("bid_hash", fmt.Sprintf("%x", event.BidHash)).
+                            Uint64("decay_start_timestamp", event.DecayStartTimeStamp).
+                            Uint64("decay_end_timestamp", event.DecayEndTimeStamp).
+                            Str("txn_hash", event.TxnHash).
+                            Str("commitment_hash", fmt.Sprintf("%x", event.CommitmentHash)).
+                            Str("bid_signature", fmt.Sprintf("%x", event.BidSignature)).
+                            Str("commitment_signature", fmt.Sprintf("%x", event.CommitmentSignature)).
+                            Uint64("dispatch_timestamp", event.DispatchTimestamp).
+                            Str("shared_secret_key", fmt.Sprintf("%x", event.SharedSecretKey)).
+                            Msg("CommitmentStored Event Detected")
+                    }
+                }
+            }()
+        }
+    }
 }
