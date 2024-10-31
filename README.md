@@ -27,6 +27,7 @@ OFFSET=1   # of blocks in the future to ask for the preconf bid
 NUM_BLOB=0 # blob count of 0 will just send eth transfers
 BID_AMOUNT=0.0025       # preconf bid amount
 BID_AMOUNT_STD_DEV_PERCENTAGE=200   # amount of variation in the preconf bid amount (in %)
+DEFAULT_TIMEOUT=0
 ```
 ## How to run
 Ensure that the mev-commit bidder node is running in the background. A quickstart can be found [here](https://docs.primev.xyz/get-started/quickstart), which will get the latest mev-commit version and start running it with an auto generated private key. 
