@@ -126,6 +126,13 @@ func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.
 
 // ExecuteBlobTransaction executes a blob transaction with preconfirmation bids.
 func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numBlobs int, offset uint64) (*types.Transaction, uint64, error) {
+
+	pubKey, ok := authAcct.PrivateKey.Public().(*ecdsa.PublicKey)
+    if !ok || pubKey == nil {
+		log.Error().Msg("failed to cast public key to ECDSA")
+		return nil, 0, errors.New("failed to cast public key to ECDSA")
+    }
+
 	var (
 		gasLimit    = uint64(500_000)
 		blockNumber uint64
