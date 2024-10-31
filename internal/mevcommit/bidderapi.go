@@ -96,22 +96,37 @@ func SendPreconfBid(bidderClient BidderInterface, input interface{}, blockNumber
 	}
 }
 
-// SendBid method as defined earlier
+// SendBid handles sending a bid request after preparing the input data.
 func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decayStart, decayEnd int64) (pb.Bidder_SendBidClient, error) {
-	// Prepare variables to hold transaction hashes or raw transactions
+	txHashes, rawTransactions, err := b.parseInput(input)
+	if err != nil {
+		return nil, err
+	}
+
+	bidRequest := b.createBidRequest(amount, blockNumber, decayStart, decayEnd, txHashes, rawTransactions)
+
+	response, err := b.sendBidRequest(bidRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	b.receiveBidResponses(response)
+
+	return response, nil
+}
+
+// parseInput processes the input and converts it to either transaction hashes or raw transactions.
+func (b *Bidder) parseInput(input interface{}) ([]string, []string, error) {
 	var txHashes []string
 	var rawTransactions []string
 
-	// Determine the input type and process accordingly
 	switch v := input.(type) {
 	case []string:
-		// If input is a slice of transaction hashes
 		txHashes = make([]string, len(v))
 		for i, hash := range v {
 			txHashes[i] = strings.TrimPrefix(hash, "0x")
 		}
 	case []*types.Transaction:
-		// If input is a slice of *types.Transaction, convert to raw transactions
 		rawTransactions = make([]string, len(v))
 		for i, tx := range v {
 			rlpEncodedTx, err := tx.MarshalBinary()
@@ -119,7 +134,7 @@ func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decaySta
 				log.Error().
 					Err(err).
 					Msg("Failed to marshal transaction to raw format")
-				return nil, fmt.Errorf("failed to marshal transaction: %w", err)
+				return nil, nil, fmt.Errorf("failed to marshal transaction: %w", err)
 			}
 			rawTransactions[i] = hex.EncodeToString(rlpEncodedTx)
 		}
@@ -127,10 +142,14 @@ func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decaySta
 		log.Warn().
 			Str("inputType", fmt.Sprintf("%T", input)).
 			Msg("Unsupported input type, must be []string or []*types.Transaction")
-		return nil, fmt.Errorf("unsupported input type: %T", input)
+		return nil, nil, fmt.Errorf("unsupported input type: %T", input)
 	}
 
-	// Create a new bid request with the appropriate transaction data
+	return txHashes, rawTransactions, nil
+}
+
+// createBidRequest builds a Bid request using the provided data.
+func (b *Bidder) createBidRequest(amount string, blockNumber, decayStart, decayEnd int64, txHashes, rawTransactions []string) *pb.Bid {
 	bidRequest := &pb.Bid{
 		Amount:              amount,
 		BlockNumber:         blockNumber,
@@ -144,9 +163,12 @@ func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decaySta
 		bidRequest.RawTransactions = rawTransactions
 	}
 
-	ctx := context.Background()
+	return bidRequest
+}
 
-	// Send the bid request to the mev-commit client
+// sendBidRequest sends the prepared bid request to the mev-commit client.
+func (b *Bidder) sendBidRequest(bidRequest *pb.Bid) (pb.Bidder_SendBidClient, error) {
+	ctx := context.Background()
 	response, err := b.client.SendBid(ctx, bidRequest)
 	if err != nil {
 		log.Error().
@@ -155,7 +177,11 @@ func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decaySta
 		return nil, fmt.Errorf("failed to send bid: %w", err)
 	}
 
-	// Continuously receive bid responses
+	return response, nil
+}
+
+// receiveBidResponses processes the responses from the bid request.
+func (b *Bidder) receiveBidResponses(response pb.Bidder_SendBidClient) {
 	for {
 		msg, err := response.Recv()
 		if err == io.EOF {
@@ -174,11 +200,8 @@ func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decaySta
 			Msg("Bid accepted")
 	}
 
-	// Timer before saving bid responses
 	startTimeBeforeSaveResponses := time.Now()
 	log.Info().
 		Time("time", startTimeBeforeSaveResponses).
 		Msg("End Time")
-
-	return response, nil
 }
