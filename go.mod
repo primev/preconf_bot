@@ -1,8 +1,6 @@
 module github.com/primev/preconf_blob_bidder
 
-go 1.22
-
-toolchain go1.23.0
+go 1.23
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.34.2-20240717164558-a6c49f84cc0f.2
@@ -11,16 +9,10 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20240528184218-531527333157
 	google.golang.org/grpc v1.64.0
 	google.golang.org/protobuf v1.34.2
-)
-
-require (
 	github.com/consensys/gnark-crypto v0.12.1
 	github.com/crate-crypto/go-kzg-4844 v1.0.0
 	github.com/holiman/uint256 v1.3.1
 	github.com/stretchr/testify v1.9.0
-)
-
-require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
 	github.com/crate-crypto/go-ipa v0.0.0-20240223125850-b1e8a79f509c // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
