@@ -15,7 +15,7 @@ import (
 
 type JSONRPCResponse struct {
 	Result json.RawMessage `json:"result"`
-	Error  *RPCError       `json:"error"`
+	RPCError       
 }
 
 type RPCError struct {
@@ -30,8 +30,7 @@ type FlashbotsPayload struct {
 	ID      int                      `json:"id"`
 }
 
-func SendBundle(RPCURL string, signedTx *types.Transaction, blkNum uint64) (string, error) {
-	// Marshal the signed transaction into binary
+func SendBundle(rpcurl string, signedTx *types.Transaction, blkNum uint64) (string, error) {
 	binary, err := signedTx.MarshalBinary()
 	if err != nil {
 		log.Error().
@@ -40,10 +39,7 @@ func SendBundle(RPCURL string, signedTx *types.Transaction, blkNum uint64) (stri
 		return "", err
 	}
 
-	// Encode the block number
 	blockNum := hexutil.EncodeUint64(blkNum)
-
-	// Prepare the Flashbots payload
 	payload := FlashbotsPayload{
 		Jsonrpc: "2.0",
 		Method:  "eth_sendBundle",
@@ -58,7 +54,6 @@ func SendBundle(RPCURL string, signedTx *types.Transaction, blkNum uint64) (stri
 		ID: 1,
 	}
 
-	// Marshal the payload into JSON
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		log.Error().
@@ -67,12 +62,10 @@ func SendBundle(RPCURL string, signedTx *types.Transaction, blkNum uint64) (stri
 		return "", err
 	}
 
-	// Create a context with a timeout
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
-	// Create a new HTTP POST request with the JSON payload
-	req, err := http.NewRequestWithContext(ctx, "POST", RPCURL, bytes.NewBuffer(payloadBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rpcurl, bytes.NewReader(payloadBytes))
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -81,7 +74,6 @@ func SendBundle(RPCURL string, signedTx *types.Transaction, blkNum uint64) (stri
 	}
 	req.Header.Add("Content-Type", "application/json")
 
-	// Send the HTTP request using the default client
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Error().
@@ -91,7 +83,6 @@ func SendBundle(RPCURL string, signedTx *types.Transaction, blkNum uint64) (stri
 	}
 	defer resp.Body.Close()
 
-	// Read the response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Error().
@@ -100,7 +91,6 @@ func SendBundle(RPCURL string, signedTx *types.Transaction, blkNum uint64) (stri
 		return "", err
 	}
 
-	// Parse the JSON-RPC response
 	var rpcResp JSONRPCResponse
 	err = json.Unmarshal(body, &rpcResp)
 	if err != nil {
@@ -110,16 +100,14 @@ func SendBundle(RPCURL string, signedTx *types.Transaction, blkNum uint64) (stri
 		return "", err
 	}
 
-	// Check if the RPC response contains an error
-	if rpcResp.Error != nil {
+	if rpcResp.Code != 0 {
 		log.Error().
-			Int("code", rpcResp.Error.Code).
-			Str("message", rpcResp.Error.Message).
+			Int("code", rpcResp.Code).
+			Str("message", rpcResp.Message).
 			Msg("Received error from RPC")
-		return "", fmt.Errorf("RPC Error %d: %s", rpcResp.Error.Code, rpcResp.Error.Message)
+		return "", fmt.Errorf("request failed %d: %s", rpcResp.Code, rpcResp.Message)
 	}
 
-	// Marshal the result back to a string
 	resultStr, err := json.Marshal(rpcResp.Result)
 	if err != nil {
 		log.Error().
