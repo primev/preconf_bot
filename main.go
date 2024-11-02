@@ -141,8 +141,6 @@ func main() {
 
 			cfg := bb.BidderConfig{
 				ServerAddress: bidderAddress,
-				LogFmt:        "json",
-				LogLevel:      "info",
 			}
 
 			bidderClient, err := bb.NewBidderClient(cfg)
