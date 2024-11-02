@@ -80,8 +80,12 @@ func NewBidderClient(cfg BidderConfig) (*Bidder, error) {
 // Returns:
 // - A pointer to an ethclient.Client for interacting with the Ethereum node, or an error if the connection fails.
 func NewGethClient(endpoint string) (*ethclient.Client, error) {
-	// Dial the Ethereum RPC endpoint
-	client, err := rpc.Dial(endpoint)
+	// Create a context with a 15-second timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Use DialContext to establish a connection with the 15-second timeout
+	client, err := rpc.DialContext(ctx, endpoint)
 	if err != nil {
 		log.Error().
 			Err(err).
@@ -250,14 +254,21 @@ func ReconnectWSClient(wsEndpoint string, headers chan *types.Header) (*ethclien
 				Str("ws_endpoint", MaskEndpoint(wsEndpoint)).
 				Int("attempt", i+1).
 				Msg("WebSocket client reconnected")
-			sub, err = wsClient.SubscribeNewHead(context.Background(), headers)
+
+			// Create a context with a 15-second timeout for the subscription
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+
+			sub, err = wsClient.SubscribeNewHead(ctx, headers)
 			if err == nil {
 				return wsClient, sub
 			}
+
 			log.Warn().
 				Err(err).
 				Msg("Failed to subscribe to new headers after reconnecting")
 		}
+
 		log.Warn().
 			Err(err).
 			Str("ws_endpoint", MaskEndpoint(wsEndpoint)).
