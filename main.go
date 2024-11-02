@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"math/big"
 	"math/rand"
 	"os"
@@ -201,7 +202,7 @@ func main() {
 					var blockNumber uint64
 					if numBlob == 0 {
 						// Perform ETH Transfer
-						amount := new(big.Int).SetInt64(1e15)
+						amount := big.NewInt(1e15)
 						signedTx, blockNumber, err = ee.SelfETHTransfer(wsClient, authAcct, amount, offset)
 					} else {
 						// Execute Blob Transaction
@@ -231,10 +232,8 @@ func main() {
 					// Generate random amount with normal distribution
 					randomEthAmount := rand.NormFloat64()*stdDev + bidAmount
 
-					// Ensure the randomEthAmount is positive
-					if randomEthAmount <= 0 {
-						randomEthAmount = bidAmount // Fallback to bidAmount
-					}
+					// use max(randomEthAmount, bidAmount) to ensure value is positive
+					randomEthAmount = math.Max(randomEthAmount, bidAmount)
 
 					if usePayload {
 						// If use-payload is true, send the transaction payload to mev-commit. Don't send bundle
