@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
+	"log/slog"
 	"math"
 	"time"
 
@@ -20,7 +21,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -60,10 +60,10 @@ func NewBidderClient(cfg BidderConfig) (*Bidder, error) {
 	// Establish a gRPC connection to the bidder service
 	conn, err := grpc.NewClient(cfg.ServerAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("server_address", cfg.ServerAddress).
-			Msg("Failed to connect to gRPC server")
+		slog.Error("Failed to connect to gRPC server",
+			"error", err,
+			"server_address", cfg.ServerAddress,
+		)
 		return nil, err
 	}
 
@@ -87,18 +87,18 @@ func NewGethClient(endpoint string) (*ethclient.Client, error) {
 	// Use DialContext to establish a connection with the 15-second timeout
 	client, err := rpc.DialContext(ctx, endpoint)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("endpoint", MaskEndpoint(endpoint)).
-			Msg("Failed to dial Ethereum RPC endpoint")
+		slog.Error("Failed to dial Ethereum RPC endpoint",
+			"error", err,
+			"endpoint", MaskEndpoint(endpoint),
+		)
 		return nil, err
 	}
 
 	// Create a new ethclient.Client using the RPC client
 	ec := ethclient.NewClient(client)
-	log.Info().
-		Str("endpoint", MaskEndpoint(endpoint)).
-		Msg("Connected to Ethereum RPC endpoint")
+	slog.Info("Connected to Ethereum RPC endpoint",
+		"endpoint", MaskEndpoint(endpoint),
+	)
 	return ec, nil
 }
 
@@ -113,16 +113,16 @@ func NewGethClient(endpoint string) (*ethclient.Client, error) {
 // - An AuthAcct struct, or an error if authentication fails.
 func AuthenticateAddress(privateKeyHex string, client *ethclient.Client) (AuthAcct, error) {
 	if privateKeyHex == "" {
-		log.Warn().Msg("No private key provided; proceeding without authentication")
+		slog.Warn("No private key provided; proceeding without authentication")
 		return AuthAcct{}, nil
 	}
 
 	// Convert the hex-encoded private key to an ECDSA private key
 	privateKey, err := crypto.HexToECDSA(privateKeyHex)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Msg("Failed to load private key")
+		slog.Error("Failed to load private key",
+			"error", err,
+		)
 		return AuthAcct{}, err
 	}
 
@@ -130,7 +130,7 @@ func AuthenticateAddress(privateKeyHex string, client *ethclient.Client) (AuthAc
 	publicKey := privateKey.Public()
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
-		log.Error().Msg("Failed to assert public key type")
+		slog.Error("Failed to assert public key type")
 		return AuthAcct{}, fmt.Errorf("failed to assert public key type")
 	}
 
@@ -143,25 +143,25 @@ func AuthenticateAddress(privateKeyHex string, client *ethclient.Client) (AuthAc
 
 	chainID, err := client.ChainID(ctx)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Msg("Failed to fetch chain ID")
+		slog.Error("Failed to fetch chain ID",
+			"error", err,
+		)
 		return AuthAcct{}, err
 	}
 
 	// Create the transaction options with the private key and chain ID
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Msg("Failed to create authorized transactor")
+		slog.Error("Failed to create authorized transactor",
+			"error", err,
+		)
 		return AuthAcct{}, err
 	}
 
 	// Return the AuthAcct struct containing the private key, public key, address, and transaction options
-	log.Info().
-		Str("address", address.Hex()).
-		Msg("Authenticated account")
+	slog.Info("Authenticated account",
+		"address", address.Hex(),
+	)
 
 	return AuthAcct{
 		PrivateKey: privateKey,
@@ -190,26 +190,26 @@ func ConnectRPCClientWithRetries(rpcEndpoint string, maxRetries int, timeout tim
 
 		rpcClient, err = ethclient.DialContext(ctx, rpcEndpoint)
 		if err == nil {
-			log.Info().
-				Str("rpc_endpoint", MaskEndpoint(rpcEndpoint)).
-				Int("attempt", i+1).
-				Msg("Successfully connected to RPC client")
+			slog.Info("Successfully connected to RPC client",
+				"rpc_endpoint", MaskEndpoint(rpcEndpoint),
+				"attempt", i+1,
+			)
 			return rpcClient
 		}
 
-		log.Warn().
-			Err(err).
-			Str("rpc_endpoint", MaskEndpoint(rpcEndpoint)).
-			Int("attempt", i+1).
-			Msg("Failed to connect to RPC client, retrying...")
+		slog.Warn("Failed to connect to RPC client, retrying...",
+			"error", err,
+			"rpc_endpoint", MaskEndpoint(rpcEndpoint),
+			"attempt", i+1,
+		)
 		time.Sleep(10 * time.Duration(math.Pow(2, float64(i))) * time.Second) // Exponential backoff
 	}
 
-	log.Error().
-		Err(err).
-		Str("rpc_endpoint", MaskEndpoint(rpcEndpoint)).
-		Int("max_retries", maxRetries).
-		Msg("Failed to connect to RPC client after maximum retries")
+	slog.Error("Failed to connect to RPC client after maximum retries",
+		"error", err,
+		"rpc_endpoint", MaskEndpoint(rpcEndpoint),
+		"max_retries", maxRetries,
+	)
 	return nil
 }
 
@@ -226,10 +226,10 @@ func ConnectWSClient(wsEndpoint string) (*ethclient.Client, error) {
 		if err == nil {
 			return wsClient, nil
 		}
-		log.Warn().
-			Err(err).
-			Str("ws_endpoint", MaskEndpoint(wsEndpoint)).
-			Msg("Failed to connect to WebSocket client, retrying in 10 seconds...")
+		slog.Warn("Failed to connect to WebSocket client, retrying in 10 seconds...",
+			"error", err,
+			"ws_endpoint", MaskEndpoint(wsEndpoint),
+		)
 		time.Sleep(10 * time.Second)
 	}
 }
@@ -250,10 +250,10 @@ func ReconnectWSClient(wsEndpoint string, headers chan *types.Header) (*ethclien
 	for i := 0; i < 10; i++ { // Retry logic for WebSocket connection
 		wsClient, err = ConnectWSClient(wsEndpoint)
 		if err == nil {
-			log.Info().
-				Str("ws_endpoint", MaskEndpoint(wsEndpoint)).
-				Int("attempt", i+1).
-				Msg("WebSocket client reconnected")
+			slog.Info("WebSocket client reconnected",
+				"ws_endpoint", MaskEndpoint(wsEndpoint),
+				"attempt", i+1,
+			)
 
 			// Create a context with a 15-second timeout for the subscription
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -264,24 +264,24 @@ func ReconnectWSClient(wsEndpoint string, headers chan *types.Header) (*ethclien
 				return wsClient, sub
 			}
 
-			log.Warn().
-				Err(err).
-				Msg("Failed to subscribe to new headers after reconnecting")
+			slog.Warn("Failed to subscribe to new headers after reconnecting",
+				"error", err,
+			)
 		}
 
-		log.Warn().
-			Err(err).
-			Str("ws_endpoint", MaskEndpoint(wsEndpoint)).
-			Int("attempt", i+1).
-			Msg("Failed to reconnect WebSocket client, retrying in 5 seconds...")
+		slog.Warn("Failed to reconnect WebSocket client, retrying in 5 seconds...",
+			"error", err,
+			"ws_endpoint", MaskEndpoint(wsEndpoint),
+			"attempt", i+1,
+		)
 		time.Sleep(5 * time.Second)
 	}
 
-	log.Error().
-		Err(err).
-		Str("ws_endpoint", MaskEndpoint(wsEndpoint)).
-		Int("max_retries", 10).
-		Msg("Failed to reconnect WebSocket client after maximum retries")
+	slog.Error("Failed to reconnect WebSocket client after maximum retries",
+		"error", err,
+		"ws_endpoint", MaskEndpoint(wsEndpoint),
+		"max_retries", 10,
+	)
 	return nil, nil
 }
 

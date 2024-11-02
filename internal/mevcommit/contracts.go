@@ -10,13 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"log/slog"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/rs/zerolog/log"
 )
 
 // Global contract addresses
@@ -35,10 +36,11 @@ func init() {
 
 	if _, err := os.Stat(envFile); err == nil {
 		if err := loadEnvFile(envFile); err != nil {
-			log.Fatal().
-				Err(err).
-				Str("env_file", envFile).
-				Msg("Error loading .env file")
+			slog.Error("Error loading .env file",
+				"err", err,
+				"env_file", envFile,
+			)
+			return
 		}
 	}
 
@@ -62,21 +64,21 @@ func init() {
 	PreconfManagerAddress = common.HexToAddress(preconfManager)
 
 	// Log loaded contract addresses
-	log.Info().
-		Str("BidderRegistry", BidderRegistryAddress.Hex()).
-		Str("BlockTracker", BlockTrackerAddress.Hex()).
-		Str("PreconfManager", PreconfManagerAddress.Hex()).
-		Msg("Loaded contract addresses")
+	slog.Info("Loaded contract addresses",
+		"BidderRegistry", BidderRegistryAddress.Hex(),
+		"BlockTracker", BlockTrackerAddress.Hex(),
+		"PreconfManager", PreconfManagerAddress.Hex(),
+	)
 }
 
 // loadEnvFile loads environment variables from a specified file.
 func loadEnvFile(filePath string) error {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("file_path", filePath).
-			Msg("Failed to read environment file")
+		slog.Error("Failed to read environment file",
+			"err", err,
+			"file_path", filePath,
+		)
 		return err
 	}
 
@@ -94,9 +96,9 @@ func loadEnvFile(filePath string) error {
 		os.Setenv(key, value)
 	}
 
-	log.Info().
-		Str("file_path", filePath).
-		Msg("Environment variables loaded from file")
+	slog.Info("Environment variables loaded from file",
+		"file_path", filePath,
+	)
 
 	return nil
 }
@@ -131,25 +133,25 @@ type CommitmentStoredEvent struct {
 func LoadABI(filePath string) (abi.ABI, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("file_path", filePath).
-			Msg("Failed to load ABI file")
+		slog.Error("Failed to load ABI file",
+			"err", err,
+			"file_path", filePath,
+		)
 		return abi.ABI{}, err
 	}
 
 	parsedABI, err := abi.JSON(strings.NewReader(string(data)))
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("file_path", filePath).
-			Msg("Failed to parse ABI file")
+		slog.Error("Failed to parse ABI file",
+			"err", err,
+			"file_path", filePath,
+		)
 		return abi.ABI{}, err
 	}
 
-	log.Info().
-		Str("file_path", filePath).
-		Msg("ABI file loaded and parsed successfully")
+	slog.Info("ABI file loaded and parsed successfully",
+		"file_path", filePath,
+	)
 
 	return parsedABI, nil
 }
@@ -175,24 +177,23 @@ func WindowHeight(client *ethclient.Client) (*big.Int, error) {
 	var currentWindowResult []interface{}
 	err = blockTrackerContract.Call(nil, &currentWindowResult, "getCurrentWindow")
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("function", "getCurrentWindow").
-			Msg("Failed to get current window")
+		slog.Error("Failed to get current window",
+			"err", err,
+			"function", "getCurrentWindow",
+		)
 		return nil, fmt.Errorf("failed to get current window: %v", err)
 	}
 
 	// Extract the current window as *big.Int
 	currentWindow, ok := currentWindowResult[0].(*big.Int)
 	if !ok {
-		log.Error().
-			Msg("Failed to convert current window to *big.Int")
+		slog.Error("Failed to convert current window to *big.Int")
 		return nil, fmt.Errorf("conversion to *big.Int failed")
 	}
 
-	log.Info().
-		Str("current_window", currentWindow.String()).
-		Msg("Retrieved current bidding window height")
+	slog.Info("Retrieved current bidding window height",
+		"current_window", currentWindow.String(),
+	)
 
 	return currentWindow, nil
 }
@@ -218,24 +219,23 @@ func GetMinDeposit(client *ethclient.Client) (*big.Int, error) {
 	var minDepositResult []interface{}
 	err = bidderRegistryContract.Call(nil, &minDepositResult, "minDeposit")
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("function", "minDeposit").
-			Msg("Failed to call minDeposit function")
+		slog.Error("Failed to call minDeposit function",
+			"err", err,
+			"function", "minDeposit",
+		)
 		return nil, fmt.Errorf("failed to call minDeposit function: %v", err)
 	}
 
 	// Extract the minDeposit as *big.Int
 	minDeposit, ok := minDepositResult[0].(*big.Int)
 	if !ok {
-		log.Error().
-			Msg("Failed to convert minDeposit to *big.Int")
+		slog.Error("Failed to convert minDeposit to *big.Int")
 		return nil, fmt.Errorf("failed to convert minDeposit to *big.Int")
 	}
 
-	log.Info().
-		Str("min_deposit", minDeposit.String()).
-		Msg("Retrieved minimum deposit amount")
+	slog.Info("Retrieved minimum deposit amount",
+		"min_deposit", minDeposit.String(),
+	)
 
 	return minDeposit, nil
 }
@@ -271,40 +271,40 @@ func DepositIntoWindow(client *ethclient.Client, depositWindow *big.Int, authAcc
 	// Prepare and send the transaction to deposit into the specific window
 	tx, err := bidderRegistryContract.Transact(authAcct.Auth, "depositForSpecificWindow", depositWindow)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("function", "depositForSpecificWindow").
-			Msg("Failed to create deposit transaction")
+		slog.Error("Failed to create deposit transaction",
+			"err", err,
+			"function", "depositForSpecificWindow",
+		)
 		return nil, fmt.Errorf("failed to create transaction: %v", err)
 	}
 
-	log.Info().
-		Str("tx_hash", tx.Hash().Hex()).
-		Str("window", depositWindow.String()).
-		Msg("Deposit transaction sent")
+	slog.Info("Deposit transaction sent",
+		"tx_hash", tx.Hash().Hex(),
+		"window", depositWindow.String(),
+	)
 
 	// Wait for the transaction to be mined (optional)
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 	receipt, err := bind.WaitMined(ctx, client, tx)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("tx_hash", tx.Hash().Hex()).
-			Msg("Transaction mining error")
+		slog.Error("Transaction mining error",
+			"err", err,
+			"tx_hash", tx.Hash().Hex(),
+		)
 		return nil, fmt.Errorf("transaction mining error: %v", err)
 	}
 
 	// Check the transaction status
 	if receipt.Status == 1 {
-		log.Info().
-			Str("tx_hash", tx.Hash().Hex()).
-			Msg("Deposit transaction successful")
+		slog.Info("Deposit transaction successful",
+			"tx_hash", tx.Hash().Hex(),
+		)
 		return tx, nil
 	} else {
-		log.Error().
-			Str("tx_hash", tx.Hash().Hex()).
-			Msg("Deposit transaction failed")
+		slog.Error("Deposit transaction failed",
+			"tx_hash", tx.Hash().Hex(),
+		)
 		return nil, fmt.Errorf("transaction failed")
 	}
 }
@@ -332,24 +332,23 @@ func GetDepositAmount(client *ethclient.Client, address common.Address, window b
 	var depositResult []interface{}
 	err = bidderRegistryContract.Call(nil, &depositResult, "getDeposit", address, window)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("function", "getDeposit").
-			Msg("Failed to call getDeposit function")
+		slog.Error("Failed to call getDeposit function",
+			"err", err,
+			"function", "getDeposit",
+		)
 		return nil, fmt.Errorf("failed to call getDeposit function: %v", err)
 	}
 
 	// Extract the deposit amount as *big.Int
 	depositAmount, ok := depositResult[0].(*big.Int)
 	if !ok {
-		log.Error().
-			Msg("Failed to convert deposit amount to *big.Int")
+		slog.Error("Failed to convert deposit amount to *big.Int")
 		return nil, fmt.Errorf("failed to convert deposit amount to *big.Int")
 	}
 
-	log.Info().
-		Str("deposit_amount", depositAmount.String()).
-		Msg("Retrieved deposit amount for address and window")
+	slog.Info("Retrieved deposit amount for address and window",
+		"deposit_amount", depositAmount.String(),
+	)
 
 	return depositAmount, nil
 }
@@ -376,40 +375,40 @@ func WithdrawFromWindow(client *ethclient.Client, authAcct *AuthAcct, window *bi
 	// Prepare the withdrawal transaction
 	withdrawalTx, err := bidderRegistryContract.Transact(authAcct.Auth, "withdrawBidderAmountFromWindow", authAcct.Address, window)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("function", "withdrawBidderAmountFromWindow").
-			Msg("Failed to create withdrawal transaction")
+		slog.Error("Failed to create withdrawal transaction",
+			"err", err,
+			"function", "withdrawBidderAmountFromWindow",
+		)
 		return nil, fmt.Errorf("failed to create withdrawal transaction: %v", err)
 	}
 
-	log.Info().
-		Str("tx_hash", withdrawalTx.Hash().Hex()).
-		Str("window", window.String()).
-		Msg("Withdrawal transaction sent")
+	slog.Info("Withdrawal transaction sent",
+		"tx_hash", withdrawalTx.Hash().Hex(),
+		"window", window.String(),
+	)
 
 	// Wait for the withdrawal transaction to be mined
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 	withdrawalReceipt, err := bind.WaitMined(ctx, client, withdrawalTx)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("tx_hash", withdrawalTx.Hash().Hex()).
-			Msg("Withdrawal transaction mining error")
+		slog.Error("Withdrawal transaction mining error",
+			"err", err,
+			"tx_hash", withdrawalTx.Hash().Hex(),
+		)
 		return nil, fmt.Errorf("withdrawal transaction mining error: %v", err)
 	}
 
 	// Check the withdrawal transaction status
 	if withdrawalReceipt.Status == 1 {
-		log.Info().
-			Str("tx_hash", withdrawalTx.Hash().Hex()).
-			Msg("Withdrawal transaction successful")
+		slog.Info("Withdrawal transaction successful",
+			"tx_hash", withdrawalTx.Hash().Hex(),
+		)
 		return withdrawalTx, nil
 	} else {
-		log.Error().
-			Str("tx_hash", withdrawalTx.Hash().Hex()).
-			Msg("Withdrawal transaction failed")
+		slog.Error("Withdrawal transaction failed",
+			"tx_hash", withdrawalTx.Hash().Hex(),
+		)
 		return nil, fmt.Errorf("withdrawal failed")
 	}
 }
@@ -422,108 +421,109 @@ func WithdrawFromWindow(client *ethclient.Client, authAcct *AuthAcct, window *bi
 //
 // Note: The event listener uses a timeout of 15 seconds for subscription.
 func ListenForCommitmentStoredEvent(client *ethclient.Client) {
-    // Load the PreConfCommitmentStore contract ABI
-    contractAbi, err := LoadABI("abi/PreConfCommitmentStore.abi")
-    if err != nil {
-        log.Fatal().
-            Err(err).
-            Str("contract", "PreConfCommitmentStore").
-            Msg("Failed to load contract ABI")
-    }
+	// Load the PreConfCommitmentStore contract ABI
+	contractAbi, err := LoadABI("abi/PreConfCommitmentStore.abi")
+	if err != nil {
+		slog.Error("Failed to load contract ABI",
+			"contract", "PreConfCommitmentStore",
+			"err", err,
+		)
+		return
+	}
 
-    // Create a parent context that can be canceled to stop all operations
-    parentCtx, parentCancel := context.WithCancel(context.Background())
-    defer parentCancel()
+	// Create a parent context that can be canceled to stop all operations
+	parentCtx, parentCancel := context.WithCancel(context.Background())
+	defer parentCancel()
 
-    // Subscribe to new block headers
-    headers := make(chan *types.Header)
-    sub, err := client.SubscribeNewHead(parentCtx, headers)
-    if err != nil {
-        log.Fatal().
-            Err(err).
-            Msg("Failed to subscribe to new block headers")
-    }
+	// Subscribe to new block headers
+	headers := make(chan *types.Header)
+	sub, err := client.SubscribeNewHead(parentCtx, headers)
+	if err != nil {
+		slog.Error("Failed to subscribe to new block headers",
+			"err", err,
+		)
+		return
+	}
 
-    log.Info().
-        Msg("Subscribed to new block headers for CommitmentStored events")
+	slog.Info("Subscribed to new block headers for CommitmentStored events")
 
-    // Listen for new block headers and filter logs for the CommitmentStored event
-    for {
-        select {
-        case err := <-sub.Err():
-            log.Error().
-                Err(err).
-                Msg("Error with header subscription")
-            // Cancel the parent context to terminate all ongoing log subscriptions
-            parentCancel()
-            return
+	// Listen for new block headers and filter logs for the CommitmentStored event
+	for {
+		select {
+		case err := <-sub.Err():
+			slog.Error("Error with header subscription",
+				"err", err,
+			)
+			// Cancel the parent context to terminate all ongoing log subscriptions
+			parentCancel()
+			return
 
-        case header := <-headers:
-            query := ethereum.FilterQuery{
-                Addresses: []common.Address{PreconfManagerAddress},
-                FromBlock: header.Number,
-                ToBlock:   header.Number,
-            }
+		case header := <-headers:
+			query := ethereum.FilterQuery{
+				Addresses: []common.Address{PreconfManagerAddress},
+				FromBlock: header.Number,
+				ToBlock:   header.Number,
+			}
 
-            logs := make(chan types.Log)
-            ctxLogs, cancelLogs := context.WithTimeout(parentCtx, defaultTimeout)
-            
-            // Subscribe to filter logs with the derived context
-            subLogs, err := client.SubscribeFilterLogs(ctxLogs, query, logs)
-            if err != nil {
-                log.Error().
-                    Err(err).
-                    Msg("Failed to subscribe to logs")
-                // Ensure cancelLogs is called to release resources
-                cancelLogs()
-                continue
-            }
+			logs := make(chan types.Log)
+			ctxLogs, cancelLogs := context.WithTimeout(parentCtx, defaultTimeout)
 
-            // Process incoming logs in a separate goroutine
-            go func() {
-                // Ensure cancelLogs is called when the goroutine exits
-                defer cancelLogs()
+			// Subscribe to filter logs with the derived context
+			subLogs, err := client.SubscribeFilterLogs(ctxLogs, query, logs)
+			if err != nil {
+				slog.Error("Failed to subscribe to logs",
+					"err", err,
+				)
+				// Ensure cancelLogs is called to release resources
+				cancelLogs()
+				continue
+			}
 
-                for {
-                    select {
-                    case err := <-subLogs.Err():
-                        log.Error().
-                            Err(err).
-                            Msg("Error with log subscription")
-                        return
+			// Process incoming logs in a separate goroutine
+			go func() {
+				// Ensure cancelLogs is called when the goroutine exits
+				defer cancelLogs()
 
-                    case vLog := <-logs:
-                        var event CommitmentStoredEvent
+				for {
+					select {
+					case err := <-subLogs.Err():
+						slog.Error("Error with log subscription",
+							"err", err,
+						)
+						return
 
-                        // Unpack the log data into the CommitmentStoredEvent struct
-                        err := contractAbi.UnpackIntoInterface(&event, "CommitmentStored", vLog.Data)
-                        if err != nil {
-                            log.Error().
-                                Err(err).
-                                Msg("Failed to unpack log data")
-                            continue
-                        }
+					case vLog := <-logs:
+						var event CommitmentStoredEvent
 
-                        // Log event details
-                        log.Info().
-                            Str("commitment_index", fmt.Sprintf("%x", event.CommitmentIndex)).
-                            Str("bidder", event.Bidder.Hex()).
-                            Str("commiter", event.Commiter.Hex()).
-                            Uint64("bid", event.Bid).
-                            Uint64("block_number", event.BlockNumber).
-                            Str("bid_hash", fmt.Sprintf("%x", event.BidHash)).
-                            Uint64("decay_start_timestamp", event.DecayStartTimeStamp).
-                            Uint64("decay_end_timestamp", event.DecayEndTimeStamp).
-                            Str("txn_hash", event.TxnHash).
-                            Str("commitment_hash", fmt.Sprintf("%x", event.CommitmentHash)).
-                            Str("bid_signature", fmt.Sprintf("%x", event.BidSignature)).
-                            Str("commitment_signature", fmt.Sprintf("%x", event.CommitmentSignature)).
-                            Uint64("dispatch_timestamp", event.DispatchTimestamp).
-                            Str("shared_secret_key", fmt.Sprintf("%x", event.SharedSecretKey)).
-                            Msg("CommitmentStored Event Detected")
-                    }
-                }
-            }()
-        }
-    }
+						// Unpack the log data into the CommitmentStoredEvent struct
+						err := contractAbi.UnpackIntoInterface(&event, "CommitmentStored", vLog.Data)
+						if err != nil {
+							slog.Error("Failed to unpack log data",
+								"err", err,
+							)
+							continue
+						}
+
+						// Log event details
+						slog.Info("CommitmentStored Event Detected",
+							"commitment_index", fmt.Sprintf("%x", event.CommitmentIndex),
+							"bidder", event.Bidder.Hex(),
+							"commiter", event.Commiter.Hex(),
+							"bid", event.Bid,
+							"block_number", event.BlockNumber,
+							"bid_hash", fmt.Sprintf("%x", event.BidHash),
+							"decay_start_timestamp", event.DecayStartTimeStamp,
+							"decay_end_timestamp", event.DecayEndTimeStamp,
+							"txn_hash", event.TxnHash,
+							"commitment_hash", fmt.Sprintf("%x", event.CommitmentHash),
+							"bid_signature", fmt.Sprintf("%x", event.BidSignature),
+							"commitment_signature", fmt.Sprintf("%x", event.CommitmentSignature),
+							"dispatch_timestamp", event.DispatchTimestamp,
+							"shared_secret_key", fmt.Sprintf("%x", event.SharedSecretKey),
+						)
+					}
+				}
+			}()
+		}
+	}
 }

@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"errors"
+	"log/slog"
 	"math/big"
 	"os"
 	"strconv"
@@ -23,7 +24,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/holiman/uint256"
 	bb "github.com/primev/preconf_blob_bidder/internal/mevcommit"
-	"github.com/rs/zerolog/log"
 	"golang.org/x/exp/rand"
 )
 
@@ -36,21 +36,18 @@ func init() {
 	if timeoutStr != "" {
 		timeoutSeconds, err := strconv.Atoi(timeoutStr)
 		if err != nil {
-			log.Warn().
-				Str("DEFAULT_TIMEOUT", timeoutStr).
-				Msg("Invalid DEFAULT_TIMEOUT value. Using default of 15 seconds.")
+			slog.Default().Warn("Invalid DEFAULT_TIMEOUT value. Using default of 15 seconds.",
+				slog.String("DEFAULT_TIMEOUT", timeoutStr))
 			defaultTimeout = 15 * time.Second
 		} else {
 			defaultTimeout = time.Duration(timeoutSeconds) * time.Second
-			log.Info().
-				Dur("defaultTimeout", defaultTimeout).
-				Msg("defaultTimeout loaded from environment")
+			slog.Default().Info("defaultTimeout loaded from environment",
+				slog.Duration("defaultTimeout", defaultTimeout))
 		}
 	} else {
 		defaultTimeout = 15 * time.Second
-		log.Info().
-			Dur("defaultTimeout", defaultTimeout).
-			Msg("DEFAULT_TIMEOUT not set. Using default of 15 seconds.")
+		slog.Default().Info("DEFAULT_TIMEOUT not set. Using default of 15 seconds.",
+			slog.Duration("defaultTimeout", defaultTimeout))
 	}
 }
 
@@ -63,30 +60,27 @@ func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.
 	// Get the account's nonce
 	nonce, err := client.PendingNonceAt(ctx, authAcct.Address)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("function", "PendingNonceAt").
-			Msg("Failed to get pending nonce")
+		slog.Default().Error("Failed to get pending nonce",
+			slog.String("function", "PendingNonceAt"),
+			slog.Any("error", err))
 		return nil, 0, err
 	}
 
 	// Get the current base fee per gas from the latest block header
 	header, err := client.HeaderByNumber(ctx, nil)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("function", "HeaderByNumber").
-			Msg("Failed to get latest block header")
+		slog.Default().Error("Failed to get latest block header",
+			slog.String("function", "HeaderByNumber"),
+			slog.Any("error", err))
 		return nil, 0, err
 	}
 
 	// Get the chain ID
 	chainID, err := client.NetworkID(ctx)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("function", "NetworkID").
-			Msg("Failed to get network ID")
+		slog.Default().Error("Failed to get network ID",
+			slog.String("function", "NetworkID"),
+			slog.Any("error", err))
 		return nil, 0, err
 	}
 
@@ -109,17 +103,15 @@ func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.
 	signer := types.LatestSignerForChainID(chainID)
 	signedTx, err := types.SignTx(tx, signer, authAcct.PrivateKey)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("function", "SignTx").
-			Msg("Failed to sign transaction")
+		slog.Default().Error("Failed to sign transaction",
+			slog.String("function", "SignTx"),
+			slog.Any("error", err))
 		return nil, 0, err
 	}
 
-	log.Info().
-		Str("tx_hash", signedTx.Hash().Hex()).
-		Uint64("block_number", blockNumber).
-		Msg("Self ETH transfer transaction created and signed")
+	slog.Default().Info("Self ETH transfer transaction created and signed",
+		slog.String("tx_hash", signedTx.Hash().Hex()),
+		slog.Uint64("block_number", blockNumber))
 
 	return signedTx, blockNumber + offset, nil
 }
@@ -128,10 +120,10 @@ func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.
 func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numBlobs int, offset uint64) (*types.Transaction, uint64, error) {
 
 	pubKey, ok := authAcct.PrivateKey.Public().(*ecdsa.PublicKey)
-    if !ok || pubKey == nil {
-		log.Error().Msg("failed to cast public key to ECDSA")
+	if !ok || pubKey == nil {
+		slog.Default().Error("Failed to cast public key to ECDSA")
 		return nil, 0, errors.New("failed to cast public key to ECDSA")
-    }
+	}
 
 	var (
 		gasLimit    = uint64(500_000)
@@ -147,27 +139,24 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 	publicKey := privateKey.Public()
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
-		log.Error().
-			Msg("Failed to cast public key to ECDSA")
+		slog.Default().Error("Failed to cast public key to ECDSA")
 		return nil, 0, errors.New("failed to cast public key to ECDSA")
 	}
 	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
 
 	nonce, err := client.PendingNonceAt(ctx, authAcct.Address)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("function", "PendingNonceAt").
-			Msg("Failed to get pending nonce")
+		slog.Default().Error("Failed to get pending nonce",
+			slog.String("function", "PendingNonceAt"),
+			slog.Any("error", err))
 		return nil, 0, err
 	}
 
 	header, err := client.HeaderByNumber(ctx, nil)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("function", "HeaderByNumber").
-			Msg("Failed to get latest block header")
+		slog.Default().Error("Failed to get latest block header",
+			slog.String("function", "HeaderByNumber"),
+			slog.Any("error", err))
 		return nil, 0, err
 	}
 
@@ -175,10 +164,9 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 
 	chainID, err := client.NetworkID(ctx)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("function", "NetworkID").
-			Msg("Failed to get network ID")
+		slog.Default().Error("Failed to get network ID",
+			slog.String("function", "NetworkID"),
+			slog.Any("error", err))
 		return nil, 0, err
 	}
 
@@ -217,28 +205,25 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 	// Create the transaction options with the private key and chain ID
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("function", "NewKeyedTransactorWithChainID").
-			Msg("Failed to create keyed transactor")
+		slog.Default().Error("Failed to create keyed transactor",
+			slog.String("function", "NewKeyedTransactorWithChainID"),
+			slog.Any("error", err))
 		return nil, 0, err
 	}
 
 	// Sign the transaction
 	signedTx, err := auth.Signer(auth.From, tx)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Str("function", "Signer").
-			Msg("Failed to sign blob transaction")
+		slog.Default().Error("Failed to sign blob transaction",
+			slog.String("function", "Signer"),
+			slog.Any("error", err))
 		return nil, 0, err
 	}
 
-	log.Info().
-		Str("tx_hash", signedTx.Hash().Hex()).
-		Uint64("block_number", blockNumber).
-		Int("num_blobs", numBlobs).
-		Msg("Blob transaction created and signed")
+	slog.Default().Info("Blob transaction created and signed",
+		slog.String("tx_hash", signedTx.Hash().Hex()),
+		slog.Uint64("block_number", blockNumber),
+		slog.Int("num_blobs", numBlobs))
 
 	return signedTx, blockNumber + offset, nil
 }
@@ -290,9 +275,9 @@ func randFieldElement() [32]byte {
 	bytes := make([]byte, 32)
 	_, err := rand.Read(bytes)
 	if err != nil {
-		log.Fatal().
-			Err(err).
-			Msg("Failed to generate random field element")
+		slog.Default().Error("Failed to generate random field element",
+			slog.Any("error", err))
+		os.Exit(1)
 	}
 	var r fr.Element
 	r.SetBytes(bytes)

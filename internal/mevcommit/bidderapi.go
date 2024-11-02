@@ -11,10 +11,20 @@ import (
 	"strings"
 	"time"
 
+	"log/slog"
+
 	"github.com/ethereum/go-ethereum/core/types"
 	pb "github.com/primev/preconf_blob_bidder/internal/bidderpb"
-	"github.com/rs/zerolog/log"
 )
+
+// Initialize the logger with JSON format.
+// It's recommended to configure the logger in the main package.
+// If you need to initialize it here, uncomment the following init function.
+
+// func init() {
+// 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+// 	slog.SetDefault(logger)
+// }
 
 // BidderInterface defines the methods that Bidder and MockBidderClient must implement.
 type BidderInterface interface {
@@ -49,80 +59,80 @@ func SendPreconfBid(bidderClient BidderInterface, input interface{}, blockNumber
 	case string:
 		// Input is a string, process it as a transaction hash
 		txHash := strings.TrimPrefix(v, "0x")
-		log.Info().
-			Str("txHash", txHash).
-			Str("amount", amount).
-			Int64("blockNumber", blockNumber).
-			Int64("decayStart", decayStart).
-			Int64("decayEnd", decayEnd).
-			Msg("Sending bid with transaction hash")
+		slog.Info("Sending bid with transaction hash",
+			"txHash", txHash,
+			"amount", amount,
+			"blockNumber", blockNumber,
+			"decayStart", decayStart,
+			"decayEnd", decayEnd,
+		)
 		// Send the bid with tx hash string
 		responseClient, err = bidderClient.SendBid([]string{txHash}, amount, blockNumber, decayStart, decayEnd)
 
 	case *types.Transaction:
 		// Check for nil transaction
 		if v == nil {
-			log.Warn().Msg("Transaction is nil, cannot send bid.")
+			slog.Warn("Transaction is nil, cannot send bid.")
 			return
 		}
 		// Input is a transaction object, send the transaction object
-		log.Info().
-			Str("txHash", v.Hash().String()).
-			Str("amount", amount).
-			Int64("blockNumber", blockNumber).
-			Int64("decayStart", decayStart).
-			Int64("decayEnd", decayEnd).
-			Msg("Sending bid with transaction payload")
+		slog.Info("Sending bid with transaction payload",
+			"txHash", v.Hash().String(),
+			"amount", amount,
+			"blockNumber", blockNumber,
+			"decayStart", decayStart,
+			"decayEnd", decayEnd,
+		)
 		// Send the bid with the full transaction object
 		responseClient, err = bidderClient.SendBid([]*types.Transaction{v}, amount, blockNumber, decayStart, decayEnd)
 
 	default:
-		log.Warn().
-			Msg("Unsupported input type, must be string or *types.Transaction")
+		slog.Warn("Unsupported input type, must be string or *types.Transaction",
+			"inputType", fmt.Sprintf("%T", input),
+		)
 		return
 	}
 
 	// Check if there was an error sending the bid
 	if err != nil {
-		log.Warn().
-			Err(err).
-			Str("txHash", fmt.Sprintf("%v", input)).
-			Str("amount", amount).
-			Int64("blockNumber", blockNumber).
-			Int64("decayStart", decayStart).
-			Int64("decayEnd", decayEnd).
-			Msg("Failed to send bid")
+		slog.Warn("Failed to send bid",
+			"err", err,
+			"txHash", fmt.Sprintf("%v", input),
+			"amount", amount,
+			"blockNumber", blockNumber,
+			"decayStart", decayStart,
+			"decayEnd", decayEnd,
+		)
 		return
 	}
 
 	// Call Recv() to handle the response and complete the expectation in your tests
 	_, recvErr := responseClient.Recv()
 	if recvErr == io.EOF {
-		log.Info().
-			Str("txHash", fmt.Sprintf("%v", input)).
-			Int64("blockNumber", blockNumber).
-			Float64("amount (ETH)", randomEthAmount).
-			Int64("decayStart", decayStart).
-			Int64("decayEnd", decayEnd).
-			Msg("Bid response received: EOF")
+		slog.Info("Bid response received: EOF",
+			"txHash", fmt.Sprintf("%v", input),
+			"blockNumber", blockNumber,
+			"amount_ETH", randomEthAmount,
+			"decayStart", decayStart,
+			"decayEnd", decayEnd,
+		)
 	} else if recvErr != nil {
-		log.Warn().
-			Err(recvErr).
-			Str("txHash", fmt.Sprintf("%v", input)).
-			Int64("blockNumber", blockNumber).
-			Int64("decayStart", decayStart).
-			Int64("decayEnd", decayEnd).
-			Msg("Error receiving bid response")
+		slog.Warn("Error receiving bid response",
+			"err", recvErr,
+			"txHash", fmt.Sprintf("%v", input),
+			"blockNumber", blockNumber,
+			"decayStart", decayStart,
+			"decayEnd", decayEnd,
+		)
 	} else {
-		log.Info().
-			Int64("block", blockNumber).
-			Float64("amount (ETH)", randomEthAmount).
-			Int64("decayStart", decayStart).
-			Int64("decayEnd", decayEnd).
-			Msg("Sent preconfirmation bid and received response")
+		slog.Info("Sent preconfirmation bid and received response",
+			"block", blockNumber,
+			"amount_ETH", randomEthAmount,
+			"decayStart", decayStart,
+			"decayEnd", decayEnd,
+		)
 	}
 }
-
 
 // SendBid handles sending a bid request after preparing the input data.
 func (b *Bidder) SendBid(input interface{}, amount string, blockNumber, decayStart, decayEnd int64) (pb.Bidder_SendBidClient, error) {
@@ -159,17 +169,17 @@ func (b *Bidder) parseInput(input interface{}) ([]string, []string, error) {
 		for i, tx := range v {
 			rlpEncodedTx, err := tx.MarshalBinary()
 			if err != nil {
-				log.Error().
-					Err(err).
-					Msg("Failed to marshal transaction to raw format")
+				slog.Error("Failed to marshal transaction to raw format",
+					"err", err,
+				)
 				return nil, nil, fmt.Errorf("failed to marshal transaction: %w", err)
 			}
 			rawTransactions[i] = hex.EncodeToString(rlpEncodedTx)
 		}
 	default:
-		log.Warn().
-			Str("inputType", fmt.Sprintf("%T", input)).
-			Msg("Unsupported input type, must be []string or []*types.Transaction")
+		slog.Warn("Unsupported input type, must be []string or []*types.Transaction",
+			"inputType", fmt.Sprintf("%T", input),
+		)
 		return nil, nil, fmt.Errorf("unsupported input type: %T", input)
 	}
 
@@ -199,9 +209,9 @@ func (b *Bidder) sendBidRequest(bidRequest *pb.Bid) (pb.Bidder_SendBidClient, er
 	ctx := context.Background()
 	response, err := b.client.SendBid(ctx, bidRequest)
 	if err != nil {
-		log.Error().
-			Err(err).
-			Msg("Failed to send bid")
+		slog.Error("Failed to send bid",
+			"err", err,
+		)
 		return nil, fmt.Errorf("failed to send bid: %w", err)
 	}
 
@@ -217,19 +227,19 @@ func (b *Bidder) receiveBidResponses(response pb.Bidder_SendBidClient) {
 			break
 		}
 		if err != nil {
-			log.Error().
-				Err(err).
-				Msg("Failed to receive bid response")
+			slog.Error("Failed to receive bid response",
+				"err", err,
+			)
 			continue
 		}
 
-		log.Info().
-			Interface("commitmentDetails", msg).
-			Msg("Bid accepted")
+		slog.Info("Bid accepted",
+			"commitmentDetails", msg,
+		)
 	}
 
 	startTimeBeforeSaveResponses := time.Now()
-	log.Info().
-		Time("time", startTimeBeforeSaveResponses).
-		Msg("End Time")
+	slog.Info("End Time",
+		"time", startTimeBeforeSaveResponses,
+	)
 }
