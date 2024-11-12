@@ -179,8 +179,8 @@ func AuthenticateAddress(privateKeyHex string, client *ethclient.Client) (AuthAc
 // - timeout: The timeout duration for each connection attempt.
 //
 // Returns:
-// - A pointer to an ethclient.Client if successful, or nil if all retries fail.
-func ConnectRPCClientWithRetries(rpcEndpoint string, maxRetries int, timeout time.Duration) *ethclient.Client {
+// - A pointer to an ethclient.Client if successful, or an error if all retries fail.
+func ConnectRPCClientWithRetries(rpcEndpoint string, maxRetries int, timeout time.Duration) (*ethclient.Client, error) {
 	var rpcClient *ethclient.Client
 	var err error
 
@@ -194,7 +194,7 @@ func ConnectRPCClientWithRetries(rpcEndpoint string, maxRetries int, timeout tim
 				"rpc_endpoint", MaskEndpoint(rpcEndpoint),
 				"attempt", i+1,
 			)
-			return rpcClient
+			return rpcClient, nil
 		}
 
 		slog.Warn("Failed to connect to RPC client, retrying...",
@@ -210,7 +210,7 @@ func ConnectRPCClientWithRetries(rpcEndpoint string, maxRetries int, timeout tim
 		"rpc_endpoint", MaskEndpoint(rpcEndpoint),
 		"max_retries", maxRetries,
 	)
-	return nil
+	return nil, err
 }
 
 // ConnectWSClient attempts to connect to the WebSocket client with continuous retries.
@@ -241,8 +241,8 @@ func ConnectWSClient(wsEndpoint string) (*ethclient.Client, error) {
 // - headers: The channel to subscribe to new headers.
 //
 // Returns:
-// - A pointer to an ethclient.Client and an ethereum.Subscription if successful, or nil values if all retries fail.
-func ReconnectWSClient(wsEndpoint string, headers chan *types.Header) (*ethclient.Client, ethereum.Subscription) {
+// - A pointer to an ethclient.Client and an ethereum.Subscription if successful, or nil values and an error if all retries fail.
+func ReconnectWSClient(wsEndpoint string, headers chan *types.Header) (*ethclient.Client, ethereum.Subscription, error) {
 	var wsClient *ethclient.Client
 	var sub ethereum.Subscription
 	var err error
@@ -261,7 +261,7 @@ func ReconnectWSClient(wsEndpoint string, headers chan *types.Header) (*ethclien
 
 			sub, err = wsClient.SubscribeNewHead(ctx, headers)
 			if err == nil {
-				return wsClient, sub
+				return wsClient, sub, nil
 			}
 
 			slog.Warn("Failed to subscribe to new headers after reconnecting",
@@ -282,7 +282,7 @@ func ReconnectWSClient(wsEndpoint string, headers chan *types.Header) (*ethclien
 		"ws_endpoint", MaskEndpoint(wsEndpoint),
 		"max_retries", 10,
 	)
-	return nil, nil
+	return nil, nil, err
 }
 
 // MaskEndpoint masks sensitive parts of the endpoint URLs.

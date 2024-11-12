@@ -8,19 +8,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
-
 	"log/slog"
+	"net/http"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
 type JSONRPCResponse struct {
-	Result    json.RawMessage `json:"result"`
-	RPCError  RPCError         `json:"error"`
-	ID        int              `json:"id,omitempty"`
-	Jsonrpc   string           `json:"jsonrpc,omitempty"`
+	Result   json.RawMessage `json:"result"`
+	RPCError RPCError        `json:"error"`
+	ID       int             `json:"id,omitempty"`
+	Jsonrpc  string          `json:"jsonrpc,omitempty"`
 }
 
 type RPCError struct {
@@ -34,7 +33,6 @@ type FlashbotsPayload struct {
 	Params  []map[string]interface{} `json:"params"`
 	ID      int                      `json:"id"`
 }
-
 
 // SendBundle sends a signed transaction bundle to the specified RPC URL.
 // It returns the result as a string or an error if the operation fails.
