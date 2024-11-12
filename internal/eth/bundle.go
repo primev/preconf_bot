@@ -1,5 +1,3 @@
-// Package eth provides functionalities related to Ethereum interactions,
-// including sending transaction bundles via Flashbots.
 package eth
 
 import (
@@ -8,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -36,13 +33,11 @@ type FlashbotsPayload struct {
 
 // SendBundle sends a signed transaction bundle to the specified RPC URL.
 // It returns the result as a string or an error if the operation fails.
-func SendBundle(rpcurl string, signedTx *types.Transaction, blkNum uint64) (string, error) {
+func (s *Service) SendBundle(signedTx *types.Transaction, blkNum uint64) (string, error) {
 	// Marshal the signed transaction into binary format.
 	binary, err := signedTx.MarshalBinary()
 	if err != nil {
-		slog.Error("Error marshaling transaction",
-			"error", err,
-		)
+		s.Logger.Error("Error marshaling transaction", "error", err)
 		return "", err
 	}
 
@@ -67,22 +62,18 @@ func SendBundle(rpcurl string, signedTx *types.Transaction, blkNum uint64) (stri
 	// Marshal the payload into JSON.
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		slog.Error("Error marshaling payload",
-			"error", err,
-		)
+		s.Logger.Error("Error marshaling payload", "error", err)
 		return "", err
 	}
 
 	// Create a context with a timeout.
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), s.DefaultTimeout)
 	defer cancel()
 
 	// Create a new HTTP POST request with the JSON payload.
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rpcurl, bytes.NewReader(payloadBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.RPCURL, bytes.NewReader(payloadBytes))
 	if err != nil {
-		slog.Error("An error occurred creating the request",
-			"error", err,
-		)
+		s.Logger.Error("An error occurred creating the request", "error", err)
 		return "", err
 	}
 	req.Header.Add("Content-Type", "application/json")
@@ -90,9 +81,7 @@ func SendBundle(rpcurl string, signedTx *types.Transaction, blkNum uint64) (stri
 	// Execute the HTTP request.
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		slog.Error("An error occurred during the request",
-			"error", err,
-		)
+		s.Logger.Error("An error occurred during the request", "error", err)
 		return "", err
 	}
 	defer resp.Body.Close()
@@ -100,9 +89,7 @@ func SendBundle(rpcurl string, signedTx *types.Transaction, blkNum uint64) (stri
 	// Read the response body.
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		slog.Error("An error occurred reading the response body",
-			"error", err,
-		)
+		s.Logger.Error("An error occurred reading the response body", "error", err)
 		return "", err
 	}
 
@@ -110,27 +97,20 @@ func SendBundle(rpcurl string, signedTx *types.Transaction, blkNum uint64) (stri
 	var rpcResp JSONRPCResponse
 	err = json.Unmarshal(body, &rpcResp)
 	if err != nil {
-		slog.Error("Failed to unmarshal response",
-			"error", err,
-		)
+		s.Logger.Error("Failed to unmarshal response", "error", err)
 		return "", err
 	}
 
 	// Check for RPC errors.
 	if rpcResp.RPCError.Code != 0 {
-		slog.Error("Received error from RPC",
-			"code", rpcResp.RPCError.Code,
-			"message", rpcResp.RPCError.Message,
-		)
+		s.Logger.Error("Received error from RPC", "code", rpcResp.RPCError.Code, "message", rpcResp.RPCError.Message)
 		return "", fmt.Errorf("request failed %d: %s", rpcResp.RPCError.Code, rpcResp.RPCError.Message)
 	}
 
 	// Marshal the result to a string.
 	resultStr, err := json.Marshal(rpcResp.Result)
 	if err != nil {
-		slog.Error("Failed to marshal result",
-			"error", err,
-		)
+		s.Logger.Error("Failed to marshal result", "error", err)
 		return "", err
 	}
 

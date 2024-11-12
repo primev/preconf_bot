@@ -11,8 +11,6 @@ import (
 	"log/slog"
 	"math/big"
 	"os"
-	"strconv"
-	"time"
 
 	"github.com/consensys/gnark-crypto/ecc/bls12-381/fr"
 	gokzg4844 "github.com/crate-crypto/go-kzg-4844"
@@ -21,53 +19,23 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/holiman/uint256"
-	bb "github.com/primev/preconf_blob_bidder/internal/mevcommit"
 	"golang.org/x/exp/rand"
 )
 
-var defaultTimeout time.Duration
-
-// init initializes the defaultTimeout variable by reading the DEFAULT_TIMEOUT
-// environment variable. If not set or invalid, it defaults to 15 seconds.
-func init() {
-	timeoutStr := os.Getenv("DEFAULT_TIMEOUT")
-	if timeoutStr != "" {
-		timeoutSeconds, err := strconv.Atoi(timeoutStr)
-		if err != nil {
-			slog.Default().Warn("Invalid DEFAULT_TIMEOUT value. Using default of 15 seconds.",
-				slog.String("DEFAULT_TIMEOUT", timeoutStr))
-			defaultTimeout = 15 * time.Second
-		} else {
-			defaultTimeout = time.Duration(timeoutSeconds) * time.Second
-			slog.Default().Info("defaultTimeout loaded from environment",
-				slog.Duration("defaultTimeout", defaultTimeout))
-		}
-	} else {
-		defaultTimeout = 15 * time.Second
-		slog.Default().Info("DEFAULT_TIMEOUT not set. Using default of 15 seconds.",
-			slog.Duration("defaultTimeout", defaultTimeout))
-	}
-}
-
-// SelfETHTransfer sends an ETH transfer transaction from the authenticated account.
-func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.Int, offset uint64) (*types.Transaction, uint64, error) {
-	// Set a timeout context
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+func (s *Service) SelfETHTransfer(value *big.Int, offset uint64) (*types.Transaction, uint64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), s.DefaultTimeout)
 	defer cancel()
 
-	// Get the account's nonce
-	nonce, err := client.PendingNonceAt(ctx, authAcct.Address)
+	// Use s.Client, s.AuthAcct, s.Logger
+	nonce, err := s.Client.PendingNonceAt(ctx, s.AuthAcct.Address)
 	if err != nil {
-		slog.Default().Error("Failed to get pending nonce",
-			slog.String("function", "PendingNonceAt"),
-			slog.Any("error", err))
+		s.Logger.Error("Failed to get pending nonce", "error", err)
 		return nil, 0, err
 	}
 
 	// Get the current base fee per gas from the latest block header
-	header, err := client.HeaderByNumber(ctx, nil)
+	header, err := s.Client.HeaderByNumber(ctx, nil)
 	if err != nil {
 		slog.Default().Error("Failed to get latest block header",
 			slog.String("function", "HeaderByNumber"),
@@ -76,7 +44,7 @@ func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.
 	}
 
 	// Get the chain ID
-	chainID, err := client.NetworkID(ctx)
+	chainID, err := s.Client.NetworkID(ctx)
 	if err != nil {
 		slog.Default().Error("Failed to get network ID",
 			slog.String("function", "NetworkID"),
@@ -92,7 +60,7 @@ func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.
 	maxFee := new(big.Int).Add(baseFee, priorityFee)
 	tx := types.NewTx(&types.DynamicFeeTx{
 		Nonce:     nonce,
-		To:        &authAcct.Address,
+		To:        &s.AuthAcct.Address,
 		Value:     value,
 		Gas:       500_000,
 		GasFeeCap: maxFee,
@@ -101,7 +69,7 @@ func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.
 
 	// Sign the transaction with the authenticated account's private key
 	signer := types.LatestSignerForChainID(chainID)
-	signedTx, err := types.SignTx(tx, signer, authAcct.PrivateKey)
+	signedTx, err := types.SignTx(tx, signer, s.AuthAcct.PrivateKey)
 	if err != nil {
 		slog.Default().Error("Failed to sign transaction",
 			slog.String("function", "SignTx"),
@@ -117,9 +85,9 @@ func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.
 }
 
 // ExecuteBlobTransaction executes a blob transaction with preconfirmation bids.
-func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numBlobs int, offset uint64) (*types.Transaction, uint64, error) {
+func (s *Service) ExecuteBlobTransaction(numBlobs int, offset uint64) (*types.Transaction, uint64, error) {
 
-	pubKey, ok := authAcct.PrivateKey.Public().(*ecdsa.PublicKey)
+	pubKey, ok := s.AuthAcct.PrivateKey.Public().(*ecdsa.PublicKey)
 	if !ok || pubKey == nil {
 		slog.Default().Error("Failed to cast public key to ECDSA")
 		return nil, 0, errors.New("failed to cast public key to ECDSA")
@@ -132,10 +100,10 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 	)
 
 	// Set a timeout context
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), s.DefaultTimeout)
 	defer cancel()
 
-	privateKey := authAcct.PrivateKey
+	privateKey := s.AuthAcct.PrivateKey
 	publicKey := privateKey.Public()
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
@@ -144,7 +112,7 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 	}
 	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
 
-	nonce, err := client.PendingNonceAt(ctx, authAcct.Address)
+	nonce, err := s.Client.PendingNonceAt(ctx, s.AuthAcct.Address)
 	if err != nil {
 		slog.Default().Error("Failed to get pending nonce",
 			slog.String("function", "PendingNonceAt"),
@@ -152,7 +120,7 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 		return nil, 0, err
 	}
 
-	header, err := client.HeaderByNumber(ctx, nil)
+	header, err := s.Client.HeaderByNumber(ctx, nil)
 	if err != nil {
 		slog.Default().Error("Failed to get latest block header",
 			slog.String("function", "HeaderByNumber"),
@@ -162,7 +130,7 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 
 	blockNumber = header.Number.Uint64()
 
-	chainID, err := client.NetworkID(ctx)
+	chainID, err := s.Client.NetworkID(ctx)
 	if err != nil {
 		slog.Default().Error("Failed to get network ID",
 			slog.String("function", "NetworkID"),
