@@ -35,8 +35,8 @@ const (
 func main() {
 	// Initialize the slog logger with JSON handler and set log level to Info
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level:      slog.LevelInfo,
-		AddSource:  true,
+		Level:     slog.LevelInfo,
+		AddSource: true,
 	}))
 	slog.SetDefault(logger)
 
@@ -157,7 +157,10 @@ func main() {
 			// Only connect to the RPC client if usePayload is false
 			var rpcClient *ethclient.Client
 			if !usePayload {
-				rpcClient = bb.ConnectRPCClientWithRetries(rpcEndpoint, 5, timeout)
+				rpcClient, err = bb.ConnectRPCClientWithRetries(rpcEndpoint, 5, timeout)
+				if err != nil {
+					slog.Error("Failed to connect to RPC client", "rpcEndpoint", bb.MaskEndpoint(rpcEndpoint), "error", err)
+				}
 				if rpcClient == nil {
 					slog.Error("Failed to connect to RPC client", "rpcEndpoint", bb.MaskEndpoint(rpcEndpoint))
 				} else {
@@ -195,7 +198,11 @@ func main() {
 				select {
 				case err := <-sub.Err():
 					slog.Warn("Subscription error", "error", err)
-					wsClient, sub = bb.ReconnectWSClient(wsEndpoint, headers)
+					wsClient, sub, err = bb.ReconnectWSClient(wsEndpoint, headers)
+					if err != nil {
+						slog.Error("Failed to reconnect to WebSocket client", "error", err)
+						continue
+					}
 					continue
 				case header := <-headers:
 					var signedTx *types.Transaction
