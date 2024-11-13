@@ -20,27 +20,47 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-// Global contract addresses
-var (
+type Service struct {
+	Client                *ethclient.Client
+	AuthAcct              *AuthAcct
+	Logger                *slog.Logger
+	DefaultTimeout        time.Duration
 	BidderRegistryAddress common.Address
 	BlockTrackerAddress   common.Address
 	PreconfManagerAddress common.Address
-)
+	// Add any other necessary fields
+}
 
-func init() {
-	// Load custom environment file if specified, otherwise default to .env
-	envFile := os.Getenv("ENV_FILE")
+// CommitmentStoredEvent represents the data structure for the CommitmentStored event.
+type CommitmentStoredEvent struct {
+	CommitmentIndex     [32]byte
+	Bidder              common.Address
+	Commiter            common.Address
+	Bid                 uint64
+	BlockNumber         uint64
+	BidHash             [32]byte
+	DecayStartTimeStamp uint64
+	DecayEndTimeStamp   uint64
+	TxnHash             string
+	CommitmentHash      [32]byte
+	BidSignature        []byte
+	CommitmentSignature []byte
+	DispatchTimestamp   uint64
+	SharedSecretKey     []byte
+}
+
+func NewService(client *ethclient.Client, authAcct *AuthAcct, logger *slog.Logger, envFile string) (*Service, error) {
 	if envFile == "" {
 		envFile = ".env" // default to .env if ENV_FILE is not set
 	}
 
 	if _, err := os.Stat(envFile); err == nil {
 		if err := loadEnvFile(envFile); err != nil {
-			slog.Error("Error loading .env file",
+			logger.Error("Error loading .env file",
 				"err", err,
 				"env_file", envFile,
 			)
-			return
+			return nil, err
 		}
 	}
 
@@ -49,26 +69,38 @@ func init() {
 	if bidderRegistry == "" {
 		bidderRegistry = "0x401B3287364f95694c43ACA3252831cAc02e5C41"
 	}
-	BidderRegistryAddress = common.HexToAddress(bidderRegistry)
+	bidderRegistryAddress := common.HexToAddress(bidderRegistry)
 
 	blockTracker := os.Getenv("BLOCK_TRACKER_ADDRESS")
 	if blockTracker == "" {
 		blockTracker = "0x7538F3AaA07dA1990486De21A0B438F55e9639e4"
 	}
-	BlockTrackerAddress = common.HexToAddress(blockTracker)
+	blockTrackerAddress := common.HexToAddress(blockTracker)
 
 	preconfManager := os.Getenv("PRECONF_MANAGER_ADDRESS")
 	if preconfManager == "" {
 		preconfManager = "0x9433bCD9e89F923ce587f7FA7E39e120E93eb84D"
 	}
-	PreconfManagerAddress = common.HexToAddress(preconfManager)
+	preconfManagerAddress := common.HexToAddress(preconfManager)
 
 	// Log loaded contract addresses
-	slog.Info("Loaded contract addresses",
-		"BidderRegistry", BidderRegistryAddress.Hex(),
-		"BlockTracker", BlockTrackerAddress.Hex(),
-		"PreconfManager", PreconfManagerAddress.Hex(),
+	logger.Info("Loaded contract addresses",
+		"BidderRegistry", bidderRegistryAddress.Hex(),
+		"BlockTracker", blockTrackerAddress.Hex(),
+		"PreconfManager", preconfManagerAddress.Hex(),
 	)
+
+	service := &Service{
+		Client:                client,
+		AuthAcct:              authAcct,
+		Logger:                logger,
+		DefaultTimeout:        15 * time.Second, // or load from env if needed
+		BidderRegistryAddress: bidderRegistryAddress,
+		BlockTrackerAddress:   blockTrackerAddress,
+		PreconfManagerAddress: preconfManagerAddress,
+	}
+
+	return service, nil
 }
 
 // loadEnvFile loads environment variables from a specified file.
@@ -101,26 +133,6 @@ func loadEnvFile(filePath string) error {
 	)
 
 	return nil
-}
-
-const defaultTimeout = 15 * time.Second
-
-// CommitmentStoredEvent represents the data structure for the CommitmentStored event.
-type CommitmentStoredEvent struct {
-	CommitmentIndex     [32]byte
-	Bidder              common.Address
-	Commiter            common.Address
-	Bid                 uint64
-	BlockNumber         uint64
-	BidHash             [32]byte
-	DecayStartTimeStamp uint64
-	DecayEndTimeStamp   uint64
-	TxnHash             string
-	CommitmentHash      [32]byte
-	BidSignature        []byte
-	CommitmentSignature []byte
-	DispatchTimestamp   uint64
-	SharedSecretKey     []byte
 }
 
 // LoadABI loads the ABI from the specified file path and parses it.
@@ -156,14 +168,7 @@ func LoadABI(filePath string) (abi.ABI, error) {
 	return parsedABI, nil
 }
 
-// WindowHeight retrieves the current bidding window height from the BlockTracker contract.
-//
-// Parameters:
-// - client: The Ethereum client instance.
-//
-// Returns:
-// - The current window height as a big.Int, or an error if the call fails.
-func WindowHeight(client *ethclient.Client) (*big.Int, error) {
+func (s *Service) WindowHeight() (*big.Int, error) {
 	// Load the BlockTracker contract ABI
 	blockTrackerABI, err := LoadABI("abi/BlockTracker.abi")
 	if err != nil {
@@ -171,13 +176,13 @@ func WindowHeight(client *ethclient.Client) (*big.Int, error) {
 	}
 
 	// Bind the contract to the client
-	blockTrackerContract := bind.NewBoundContract(BlockTrackerAddress, blockTrackerABI, client, client, client)
+	blockTrackerContract := bind.NewBoundContract(s.BlockTrackerAddress, blockTrackerABI, s.Client, s.Client, s.Client)
 
 	// Call the getCurrentWindow function to retrieve the current window height
 	var currentWindowResult []interface{}
 	err = blockTrackerContract.Call(nil, &currentWindowResult, "getCurrentWindow")
 	if err != nil {
-		slog.Error("Failed to get current window",
+		s.Logger.Error("Failed to get current window",
 			"err", err,
 			"function", "getCurrentWindow",
 		)
@@ -187,11 +192,11 @@ func WindowHeight(client *ethclient.Client) (*big.Int, error) {
 	// Extract the current window as *big.Int
 	currentWindow, ok := currentWindowResult[0].(*big.Int)
 	if !ok {
-		slog.Error("Failed to convert current window to *big.Int")
+		s.Logger.Error("Failed to convert current window to *big.Int")
 		return nil, fmt.Errorf("conversion to *big.Int failed")
 	}
 
-	slog.Info("Retrieved current bidding window height",
+	s.Logger.Info("Retrieved current bidding window height",
 		"current_window", currentWindow.String(),
 	)
 
@@ -205,7 +210,7 @@ func WindowHeight(client *ethclient.Client) (*big.Int, error) {
 //
 // Returns:
 // - The minimum deposit as a big.Int, or an error if the call fails.
-func GetMinDeposit(client *ethclient.Client) (*big.Int, error) {
+func (s *Service) GetMinDeposit() (*big.Int, error) {
 	// Load the BidderRegistry contract ABI
 	bidderRegistryABI, err := LoadABI("abi/BidderRegistry.abi")
 	if err != nil {
@@ -213,7 +218,7 @@ func GetMinDeposit(client *ethclient.Client) (*big.Int, error) {
 	}
 
 	// Bind the contract to the client
-	bidderRegistryContract := bind.NewBoundContract(BidderRegistryAddress, bidderRegistryABI, client, client, client)
+	bidderRegistryContract := bind.NewBoundContract(s.BidderRegistryAddress, bidderRegistryABI, s.Client, s.Client, s.Client)
 
 	// Call the minDeposit function to get the minimum deposit amount
 	var minDepositResult []interface{}
@@ -249,7 +254,7 @@ func GetMinDeposit(client *ethclient.Client) (*big.Int, error) {
 //
 // Returns:
 // - The transaction object if successful, or an error if the transaction fails.
-func DepositIntoWindow(client *ethclient.Client, depositWindow *big.Int, authAcct *AuthAcct) (*types.Transaction, error) {
+func (s *Service) DepositIntoWindow(depositWindow *big.Int) (*types.Transaction, error) {
 	// Load the BidderRegistry contract ABI
 	bidderRegistryABI, err := LoadABI("abi/BidderRegistry.abi")
 	if err != nil {
@@ -257,19 +262,19 @@ func DepositIntoWindow(client *ethclient.Client, depositWindow *big.Int, authAcc
 	}
 
 	// Bind the contract to the client
-	bidderRegistryContract := bind.NewBoundContract(BidderRegistryAddress, bidderRegistryABI, client, client, client)
+	bidderRegistryContract := bind.NewBoundContract(s.BidderRegistryAddress, bidderRegistryABI, s.Client, s.Client, s.Client)
 
 	// Retrieve the minimum deposit amount
-	minDeposit, err := GetMinDeposit(client)
+	minDeposit, err := s.GetMinDeposit()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get minDeposit: %v", err)
 	}
 
 	// Set the value for the transaction to the minimum deposit amount
-	authAcct.Auth.Value = minDeposit
+	s.AuthAcct.Auth.Value = minDeposit
 
 	// Prepare and send the transaction to deposit into the specific window
-	tx, err := bidderRegistryContract.Transact(authAcct.Auth, "depositForSpecificWindow", depositWindow)
+	tx, err := bidderRegistryContract.Transact(s.AuthAcct.Auth, "depositForSpecificWindow", depositWindow)
 	if err != nil {
 		slog.Error("Failed to create deposit transaction",
 			"err", err,
@@ -284,9 +289,9 @@ func DepositIntoWindow(client *ethclient.Client, depositWindow *big.Int, authAcc
 	)
 
 	// Wait for the transaction to be mined (optional)
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), s.DefaultTimeout)
 	defer cancel()
-	receipt, err := bind.WaitMined(ctx, client, tx)
+	receipt, err := bind.WaitMined(ctx, s.Client, tx)
 	if err != nil {
 		slog.Error("Transaction mining error",
 			"err", err,
@@ -309,16 +314,7 @@ func DepositIntoWindow(client *ethclient.Client, depositWindow *big.Int, authAcc
 	}
 }
 
-// GetDepositAmount retrieves the deposit amount for a given address and window.
-//
-// Parameters:
-// - client: The Ethereum client instance.
-// - address: The Ethereum address to query the deposit for.
-// - window: The bidding window to query the deposit for.
-//
-// Returns:
-// - The deposit amount as a big.Int, or an error if the call fails.
-func GetDepositAmount(client *ethclient.Client, address common.Address, window big.Int) (*big.Int, error) {
+func (s *Service) GetDepositAmount(address common.Address, window big.Int) (*big.Int, error) {
 	// Load the BidderRegistry contract ABI
 	bidderRegistryABI, err := LoadABI("abi/BidderRegistry.abi")
 	if err != nil {
@@ -326,7 +322,7 @@ func GetDepositAmount(client *ethclient.Client, address common.Address, window b
 	}
 
 	// Bind the contract to the client
-	bidderRegistryContract := bind.NewBoundContract(BidderRegistryAddress, bidderRegistryABI, client, client, client)
+	bidderRegistryContract := bind.NewBoundContract(s.BidderRegistryAddress, bidderRegistryABI, s.Client, s.Client, s.Client)
 
 	// Call the getDeposit function to retrieve the deposit amount
 	var depositResult []interface{}
@@ -353,16 +349,7 @@ func GetDepositAmount(client *ethclient.Client, address common.Address, window b
 	return depositAmount, nil
 }
 
-// WithdrawFromWindow withdraws all funds from the specified bidding window.
-//
-// Parameters:
-// - client: The Ethereum client instance.
-// - authAcct: The authenticated account struct containing transaction authorization.
-// - window: The window from which to withdraw funds.
-//
-// Returns:
-// - The transaction object if successful, or an error if the transaction fails.
-func WithdrawFromWindow(client *ethclient.Client, authAcct *AuthAcct, window *big.Int) (*types.Transaction, error) {
+func (s *Service) WithdrawFromWindow(window *big.Int) (*types.Transaction, error) {
 	// Load the BidderRegistry contract ABI
 	bidderRegistryABI, err := LoadABI("abi/BidderRegistry.abi")
 	if err != nil {
@@ -370,10 +357,10 @@ func WithdrawFromWindow(client *ethclient.Client, authAcct *AuthAcct, window *bi
 	}
 
 	// Bind the contract to the client
-	bidderRegistryContract := bind.NewBoundContract(BidderRegistryAddress, bidderRegistryABI, client, client, client)
+	bidderRegistryContract := bind.NewBoundContract(s.BidderRegistryAddress, bidderRegistryABI, s.Client, s.Client, s.Client)
 
 	// Prepare the withdrawal transaction
-	withdrawalTx, err := bidderRegistryContract.Transact(authAcct.Auth, "withdrawBidderAmountFromWindow", authAcct.Address, window)
+	withdrawalTx, err := bidderRegistryContract.Transact(s.AuthAcct.Auth, "withdrawBidderAmountFromWindow", s.AuthAcct.Address, window)
 	if err != nil {
 		slog.Error("Failed to create withdrawal transaction",
 			"err", err,
@@ -388,9 +375,9 @@ func WithdrawFromWindow(client *ethclient.Client, authAcct *AuthAcct, window *bi
 	)
 
 	// Wait for the withdrawal transaction to be mined
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), s.DefaultTimeout)
 	defer cancel()
-	withdrawalReceipt, err := bind.WaitMined(ctx, client, withdrawalTx)
+	withdrawalReceipt, err := bind.WaitMined(ctx, s.Client, withdrawalTx)
 	if err != nil {
 		slog.Error("Withdrawal transaction mining error",
 			"err", err,
@@ -413,14 +400,7 @@ func WithdrawFromWindow(client *ethclient.Client, authAcct *AuthAcct, window *bi
 	}
 }
 
-// ListenForCommitmentStoredEvent listens for the CommitmentStored event on the Ethereum blockchain.
-// This function will log event details when the CommitmentStored event is detected.
-//
-// Parameters:
-// - client: The Ethereum client instance.
-//
-// Note: The event listener uses a timeout of 15 seconds for subscription.
-func ListenForCommitmentStoredEvent(client *ethclient.Client) {
+func (s *Service) ListenForCommitmentStoredEvent() {
 	// Load the PreConfCommitmentStore contract ABI
 	contractAbi, err := LoadABI("abi/PreConfCommitmentStore.abi")
 	if err != nil {
@@ -437,7 +417,7 @@ func ListenForCommitmentStoredEvent(client *ethclient.Client) {
 
 	// Subscribe to new block headers
 	headers := make(chan *types.Header)
-	sub, err := client.SubscribeNewHead(parentCtx, headers)
+	sub, err := s.Client.SubscribeNewHead(parentCtx, headers)
 	if err != nil {
 		slog.Error("Failed to subscribe to new block headers",
 			"err", err,
@@ -460,16 +440,16 @@ func ListenForCommitmentStoredEvent(client *ethclient.Client) {
 
 		case header := <-headers:
 			query := ethereum.FilterQuery{
-				Addresses: []common.Address{PreconfManagerAddress},
+				Addresses: []common.Address{s.PreconfManagerAddress},
 				FromBlock: header.Number,
 				ToBlock:   header.Number,
 			}
 
 			logs := make(chan types.Log)
-			ctxLogs, cancelLogs := context.WithTimeout(parentCtx, defaultTimeout)
+			ctxLogs, cancelLogs := context.WithTimeout(parentCtx, s.DefaultTimeout)
 
 			// Subscribe to filter logs with the derived context
-			subLogs, err := client.SubscribeFilterLogs(ctxLogs, query, logs)
+			subLogs, err := s.Client.SubscribeFilterLogs(ctxLogs, query, logs)
 			if err != nil {
 				slog.Error("Failed to subscribe to logs",
 					"err", err,
