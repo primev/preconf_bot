@@ -1,4 +1,4 @@
-FROM golang:1.21
+FROM golang:1.23
 
 WORKDIR /app
 
@@ -7,10 +7,7 @@ RUN go mod download
 
 COPY . .
 
+# Build the binary as preconf_bot from main.go at the top level
+RUN go build -o preconf_bot .
 
-RUN go build -o getPreconf ./cmd
-
-
-ENTRYPOINT ["./getPreconf"]
-
-CMD ["--ethtransfer"]
+ENTRYPOINT ["./preconf_bot"]

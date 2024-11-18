@@ -10,9 +10,8 @@ services:
       - WS_ENDPOINT=${WS_ENDPOINT}
       - USE_PAYLOAD=${USE_PAYLOAD}
       - BIDDER_ADDRESS=${BIDDER_ADDRESS}
-      - ETH_TRANSFER=${ETH_TRANSFER}
-      - BLOB=${BLOB}
       - SERVICE_ADDRESS=mev-commit-bidder:13524
+      - NUM_BLOB=${NUM_BLOB}
 networks:
   app-network:
     external: true
