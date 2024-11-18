@@ -1,6 +1,4 @@
-// Package mevcommit provides functionality for interacting with the mev-commit protocol,
-// including sending bids for blob transactions and saving bid requests and responses.
-package mevcommit
+package service
 
 import (
 	"context"
@@ -15,24 +13,45 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/types"
 	pb "github.com/primev/preconf_blob_bidder/internal/bidderpb"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
-// Initialize the logger with JSON format.
-// It's recommended to configure the logger in the main package.
-// If you need to initialize it here, uncomment the following init function.
+// BidderConfig holds the configuration settings for the mev-commit bidder node.
+type BidderConfig struct {
+	ServerAddress string `json:"server_address" yaml:"server_address"` // The address of the gRPC server for the bidder node.
+	LogFmt        string `json:"log_fmt" yaml:"log_fmt"`               // The format for logging output.
+	LogLevel      string `json:"log_level" yaml:"log_level"`           // The level of logging detail.
+}
 
-// func init() {
-// 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-// 	slog.SetDefault(logger)
-// }
+// Bidder utilizes the mev-commit bidder client to interact with the mev-commit chain.
+type Bidder struct {
+	client pb.BidderClient // gRPC client for interacting with the mev-commit bidder service.
+}
 
 // BidderInterface defines the methods that Bidder and MockBidderClient must implement.
 type BidderInterface interface {
 	SendBid(input interface{}, amount string, blockNumber, decayStart, decayEnd int64) (pb.Bidder_SendBidClient, error)
 }
 
+func NewBidderClient(cfg BidderConfig) (*Bidder, error) {
+	// Establish a gRPC connection to the bidder service
+	conn, err := grpc.NewClient(cfg.ServerAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		slog.Error("Failed to connect to gRPC server",
+			"error", err,
+			"server_address", cfg.ServerAddress,
+		)
+		return nil, err
+	}
+
+	// Create a new bidder client using the gRPC connection
+	client := pb.NewBidderClient(conn)
+	return &Bidder{client: client}, nil
+}
+
 // SendPreconfBid sends a preconfirmation bid to the bidder client
-func SendPreconfBid(bidderClient BidderInterface, input interface{}, blockNumber int64, randomEthAmount float64) {
+func (b *Bidder) SendPreconfBid(bidderClient BidderInterface, input interface{}, blockNumber int64, randomEthAmount float64) {
 	// Get current time in milliseconds
 	currentTime := time.Now().UnixMilli()
 

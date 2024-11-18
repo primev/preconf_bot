@@ -11,9 +11,8 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
-	ee "github.com/primev/preconf_blob_bidder/internal/eth"
-	bb "github.com/primev/preconf_blob_bidder/internal/mevcommit"
+	"github.com/joho/godotenv"
+	"github.com/primev/preconf_blob_bidder/internal/service"
 	"github.com/urfave/cli/v2"
 )
 
@@ -32,6 +31,12 @@ const (
 )
 
 func main() {
+	// Load environment variables from .env file if it exists
+	err := godotenv.Load()
+	if err != nil {
+		slog.Info("No .env file found or failed to load .env file. Continuing with existing environment variables.")
+	}
+
 	// Initialize the slog logger with JSON handler and set log level to Info
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level:     slog.LevelInfo,
@@ -43,9 +48,80 @@ func main() {
 		Name:  "Preconf Bidder",
 		Usage: "A tool for bidding in mev-commit preconfirmation auctions for blobs and transactions",
 		Flags: []cli.Flag{
-			// Your flags here...
+			&cli.StringFlag{
+				Name:     FlagEnv,
+				Usage:    "Environment (e.g., development, production)",
+				EnvVars:  []string{"ENV"},
+				Required: false, // Make it optional if not strictly required
+			},
+			&cli.StringFlag{
+				Name:     FlagBidderAddress,
+				Usage:    "Address of the mev-commit bidder",
+				EnvVars:  []string{"BIDDER_ADDRESS"},
+				Required: true,
+			},
+			&cli.BoolFlag{
+				Name:     FlagUsePayload,
+				Usage:    "Use payload instead of transaction hash",
+				EnvVars:  []string{"USE_PAYLOAD"},
+				Required: false,
+			},
+			&cli.StringFlag{
+				Name:     FlagRpcEndpoint,
+				Usage:    "RPC endpoint",
+				EnvVars:  []string{"RPC_ENDPOINT"},
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     FlagWsEndpoint,
+				Usage:    "WebSocket endpoint",
+				EnvVars:  []string{"WS_ENDPOINT"},
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     FlagPrivateKey,
+				Usage:    "Hex-encoded private key",
+				EnvVars:  []string{"PRIVATE_KEY"},
+				Required: true,
+			},
+			&cli.Uint64Flag{
+				Name:     FlagOffset,
+				Usage:    "Block number offset",
+				EnvVars:  []string{"OFFSET"},
+				Value:    1, // Default value if not set in .env
+				Required: false,
+			},
+			&cli.Float64Flag{
+				Name:     FlagBidAmount,
+				Usage:    "Bid amount in ETH",
+				EnvVars:  []string{"BID_AMOUNT"},
+				Value:    0.01, // Default value if not set in .env
+				Required: false,
+			},
+			&cli.Float64Flag{
+				Name:     FlagBidAmountStdDevPercentage,
+				Usage:    "Standard deviation percentage for bid amount",
+				EnvVars:  []string{"BID_AMOUNT_STD_DEV_PERCENTAGE"},
+				Value:    5.0, // Default value if not set in .env
+				Required: false,
+			},
+			&cli.UintFlag{
+				Name:     FlagNumBlob,
+				Usage:    "Number of blobs to include in the transaction",
+				EnvVars:  []string{"NUM_BLOB"},
+				Value:    0, // Default value if not set in .env
+				Required: false,
+			},
+			&cli.UintFlag{
+				Name:     FlagDefaultTimeout,
+				Usage:    "Default timeout in seconds",
+				EnvVars:  []string{"DEFAULT_TIMEOUT"},
+				Value:    30, // Default value if not set in .env
+				Required: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
+			// Parse command-line arguments
 			bidderAddress := c.String(FlagBidderAddress)
 			usePayload := c.Bool(FlagUsePayload)
 			rpcEndpoint := c.String(FlagRpcEndpoint)
@@ -58,10 +134,22 @@ func main() {
 			defaultTimeoutSeconds := c.Uint(FlagDefaultTimeout)
 			defaultTimeout := time.Duration(defaultTimeoutSeconds) * time.Second
 
-			slog.Info("Configuration values",
+			// Initialize the Service with functional options
+			svc, err := service.NewService(
+				service.WithDefaultTimeout(defaultTimeout),
+				service.WithRPCURL(rpcEndpoint),
+				service.WithLogger(logger),
+			)
+			if err != nil {
+				slog.Error("Failed to initialize service", "error", err)
+				return err
+			}
+
+			// Log configuration values
+			svc.Logger.Info("Configuration values",
 				"bidderAddress", bidderAddress,
-				"rpcEndpoint", bb.MaskEndpoint(rpcEndpoint),
-				"wsEndpoint", bb.MaskEndpoint(wsEndpoint),
+				"rpcEndpoint", svc.MaskEndpoint(rpcEndpoint),
+				"wsEndpoint", svc.MaskEndpoint(wsEndpoint),
 				"offset", offset,
 				"usePayload", usePayload,
 				"bidAmount", bidAmount,
@@ -71,11 +159,40 @@ func main() {
 				"defaultTimeoutSeconds", defaultTimeoutSeconds,
 			)
 
-			cfg := bb.BidderConfig{
+			// Connect to RPC Client if not using payload
+			if !usePayload {
+				err = svc.ConnectRPCClientWithRetries(rpcEndpoint, 5)
+				if err != nil {
+					svc.Logger.Error("Failed to connect to RPC client", "rpcEndpoint", svc.MaskEndpoint(rpcEndpoint), "error", err)
+					return err
+				}
+				svc.Logger.Info("Geth client connected (rpc)",
+					"endpoint", svc.MaskEndpoint(rpcEndpoint),
+				)
+			}
+
+			// Connect to WebSocket Client
+			err = svc.ConnectWSClient(wsEndpoint)
+			if err != nil {
+				svc.Logger.Error("Failed to connect to WebSocket client", "error", err)
+				return fmt.Errorf("failed to connect to WebSocket client: %w", err)
+			}
+			svc.Logger.Info("Geth client connected (ws)",
+				"endpoint", svc.MaskEndpoint(wsEndpoint),
+			)
+
+			// Authenticate the private key
+			err = svc.AuthenticateAddress(privateKeyHex)
+			if err != nil {
+				svc.Logger.Error("Failed to authenticate private key", "error", err)
+				return fmt.Errorf("failed to authenticate private key: %w", err)
+			}
+
+			cfg := service.BidderConfig{
 				ServerAddress: bidderAddress,
 			}
 
-			bidderClient, err := bb.NewBidderClient(cfg)
+			bidderClient, err := service.NewBidderClient(cfg)
 			if err != nil {
 				slog.Error("Failed to connect to mev-commit bidder API", "error", err)
 				return fmt.Errorf("failed to connect to mev-commit bidder API: %w", err)
@@ -83,52 +200,20 @@ func main() {
 
 			slog.Info("Connected to mev-commit client")
 
-			timeout := defaultTimeout
-
-			var rpcClient *ethclient.Client
-			if !usePayload {
-				rpcClient, err = bb.ConnectRPCClientWithRetries(rpcEndpoint, 5, timeout)
-				if err != nil {
-					slog.Error("Failed to connect to RPC client", "rpcEndpoint", bb.MaskEndpoint(rpcEndpoint), "error", err)
-				}
-				if rpcClient == nil {
-					slog.Error("Failed to connect to RPC client", "rpcEndpoint", bb.MaskEndpoint(rpcEndpoint))
-				} else {
-					slog.Info("Geth client connected (rpc)",
-						"endpoint", bb.MaskEndpoint(rpcEndpoint),
-					)
-				}
-			}
-
-			wsClient, err := bb.ConnectWSClient(wsEndpoint)
-			if err != nil {
-				slog.Error("Failed to connect to WebSocket client", "error", err)
-				return fmt.Errorf("failed to connect to WebSocket client: %w", err)
-			}
-			slog.Info("Geth client connected (ws)",
-				"endpoint", bb.MaskEndpoint(wsEndpoint),
-			)
-
+			// Subscribe to new headers
 			headers := make(chan *types.Header)
-			sub, err := wsClient.SubscribeNewHead(context.Background(), headers)
+			sub, err := svc.Client.SubscribeNewHead(context.Background(), headers)
 			if err != nil {
-				slog.Error("Failed to subscribe to new blocks", "error", err)
+				svc.Logger.Error("Failed to subscribe to new blocks", "error", err)
 				return fmt.Errorf("failed to subscribe to new blocks: %w", err)
 			}
 
-			authAcct, err := bb.AuthenticateAddress(privateKeyHex, wsClient)
-			if err != nil {
-				slog.Error("Failed to authenticate private key", "error", err)
-				return fmt.Errorf("failed to authenticate private key: %w", err)
-			}
-
-			service := ee.NewService(wsClient, authAcct, defaultTimeout, rpcEndpoint, logger)
-
+			// Main event loop
 			for {
 				select {
 				case err := <-sub.Err():
 					if err != nil {
-						slog.Error("Subscription error", "error", err)
+						svc.Logger.Error("Subscription error", "error", err)
 					}
 				case header := <-headers:
 					var signedTx *types.Transaction
@@ -136,24 +221,26 @@ func main() {
 					var err error
 
 					if numBlob == 0 {
-						amount := big.NewInt(1e15)
-						signedTx, blockNumber, err = service.SelfETHTransfer(amount, offset)
+						amount := big.NewInt(1e15) // Example amount; adjust as needed
+						signedTx, blockNumber, err = svc.SelfETHTransfer(amount, offset)
 					} else {
-						signedTx, blockNumber, err = service.ExecuteBlobTransaction(int(numBlob), offset)
+						signedTx, blockNumber, err = svc.ExecuteBlobTransaction(int(numBlob), offset)
 					}
 
 					if err != nil {
-						service.Logger.Error("Failed to execute transaction", "error", err)
+						svc.Logger.Error("Failed to execute transaction", "error", err)
 						continue
 					}
 
 					if signedTx == nil {
-						slog.Error("Transaction was not signed or created.")
+						svc.Logger.Error("Transaction was not signed or created.")
 					} else {
-						slog.Info("Transaction created successfully")
+						svc.Logger.Info("Transaction created successfully",
+							"tx_hash", signedTx.Hash().Hex(),
+						)
 					}
 
-					slog.Info("New block received",
+					svc.Logger.Info("New block received",
 						"blockNumber", header.Number.Uint64(),
 						"timestamp", header.Time,
 						"hash", header.Hash().String(),
@@ -166,13 +253,16 @@ func main() {
 					randomEthAmount := math.Max(rand.NormFloat64()*stdDev+bidAmount, bidAmount)
 
 					if usePayload {
-						bb.SendPreconfBid(bidderClient, signedTx, int64(blockNumber), randomEthAmount)
-					} else {
-						_, err = service.SendBundle(signedTx, blockNumber)
+						bidderClient.SendPreconfBid(bidderClient, signedTx, int64(blockNumber), randomEthAmount)
 						if err != nil {
-							slog.Error("Failed to send transaction", "rpcEndpoint", bb.MaskEndpoint(rpcEndpoint), "error", err)
+							svc.Logger.Error("Failed to send preconfirmation bid", "error", err)
 						}
-						bb.SendPreconfBid(bidderClient, signedTx.Hash().String(), int64(blockNumber), randomEthAmount)
+					} else {
+						_, err = svc.SendBundle(signedTx, blockNumber)
+						if err != nil {
+							svc.Logger.Error("Failed to send transaction", "rpcEndpoint", svc.MaskEndpoint(rpcEndpoint), "error", err)
+						}
+						bidderClient.SendPreconfBid(bidderClient, signedTx.Hash().String(), int64(blockNumber), randomEthAmount)
 					}
 				}
 			}
