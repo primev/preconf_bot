@@ -46,8 +46,6 @@ func init() {
 		}
 	} else {
 		defaultTimeout = 15 * time.Second
-		slog.Default().Info("DEFAULT_TIMEOUT not set. Using default of 15 seconds.",
-			slog.Duration("defaultTimeout", defaultTimeout))
 	}
 }
 

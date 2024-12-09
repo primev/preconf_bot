@@ -63,12 +63,12 @@ func init() {
 	}
 	PreconfManagerAddress = common.HexToAddress(preconfManager)
 
-	// Log loaded contract addresses
-	slog.Info("Loaded contract addresses",
-		"BidderRegistry", BidderRegistryAddress.Hex(),
-		"BlockTracker", BlockTrackerAddress.Hex(),
-		"PreconfManager", PreconfManagerAddress.Hex(),
-	)
+	// // Log loaded contract addresses
+	// slog.Info("Loaded contract addresses",
+	// 	"BidderRegistry", BidderRegistryAddress.Hex(),
+	// 	"BlockTracker", BlockTrackerAddress.Hex(),
+	// 	"PreconfManager", PreconfManagerAddress.Hex(),
+	// )
 }
 
 // loadEnvFile loads environment variables from a specified file.
@@ -96,9 +96,9 @@ func loadEnvFile(filePath string) error {
 		os.Setenv(key, value)
 	}
 
-	slog.Info("Environment variables loaded from file",
-		"file_path", filePath,
-	)
+	// slog.Info("Environment variables loaded from file",
+	// 	"file_path", filePath,
+	// )
 
 	return nil
 }
