@@ -19,7 +19,6 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-// Define flag names as constants
 const (
 	FlagEnv                       = "env"
 	FlagBidderAddress             = "bidder-address"
@@ -48,18 +47,15 @@ func validateWebSocketURL(input string) (string, error) {
 		return "", fmt.Errorf("endpoint cannot be empty")
 	}
 
-	// If no scheme is provided, default to "ws://"
 	if !strings.Contains(input, "://") {
 		input = "ws://" + input
 	}
 
-	// Parse the URL to ensure it's valid
 	parsedURL, err := url.Parse(input)
 	if err != nil {
 		return "", fmt.Errorf("invalid URL format: %v", err)
 	}
 
-	// Ensure the scheme is valid for WebSocket connections
 	if parsedURL.Scheme != "ws" && parsedURL.Scheme != "wss" {
 		return "", fmt.Errorf("invalid scheme: %s (only ws:// or wss:// are supported)", parsedURL.Scheme)
 	}
@@ -79,7 +75,6 @@ func validatePrivateKey(input string) error {
 }
 
 func main() {
-	// Initialize the slog logger with JSON handler and set log level to Info
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level:     slog.LevelInfo,
 		AddSource: true,
@@ -114,11 +109,9 @@ func main() {
 			fmt.Println()
 			
 
-			// Start by trying to read values from flags/env
 			wsEndpoint := c.String(FlagWsEndpoint)
 			privateKeyHex := c.String(FlagPrivateKey)
 
-			// If wsEndpoint is missing, prompt interactively
 			if wsEndpoint == "" {
 				fmt.Println("First, we need the WebSocket endpoint for your Ethereum node.")
 				fmt.Println("This is where we'll connect to receive real-time blockchain updates.")
@@ -133,10 +126,9 @@ func main() {
 					}
 					fmt.Printf("Error: %s\nPlease try again.\n\n", err)
 				}
-				fmt.Println() // Add a blank line after successful input
+				fmt.Println()
 			}
 
-			// If privateKeyHex is missing, prompt interactively
 			if privateKeyHex == "" {
 				fmt.Println("A private key is needed to sign transactions.")
 				fmt.Println("A private key is a 64-character hexadecimal string.")
@@ -150,10 +142,10 @@ func main() {
 					}
 					fmt.Printf("Error: %s\nPlease try again.\n\n", err)
 				}
-				fmt.Println() // Add a blank line after successful input
+				fmt.Println()
 			}
 
-			// Get other parameters from flags or environment
+			
 			bidderAddress := c.String(FlagBidderAddress)
 			usePayload := c.Bool(FlagUsePayload)
 			rpcEndpoint := c.String(FlagRpcEndpoint)
@@ -164,7 +156,7 @@ func main() {
 			defaultTimeoutSeconds := c.Uint(FlagDefaultTimeout)
 			defaultTimeout := time.Duration(defaultTimeoutSeconds) * time.Second
 
-			// Print a summary to the user before proceeding
+			
 			fmt.Println("Great! Here's what we have:")
 			fmt.Printf(" - WebSocket Endpoint: %s\n", wsEndpoint)
 			fmt.Printf(" - Private Key: Provided (hidden)\n")
@@ -179,7 +171,7 @@ func main() {
 			fmt.Println("Please wait...")
 			fmt.Println()
 
-			// Log configuration values (for debugging / dev)
+			
 			slog.Info("Configuration values",
 				"bidderAddress", bidderAddress,
 				"rpcEndpoint", bb.MaskEndpoint(rpcEndpoint),
@@ -207,7 +199,7 @@ func main() {
 
 			timeout := defaultTimeout
 
-			// Only connect to the RPC client if usePayload is false
+			
 			var rpcClient *ethclient.Client
 			if !usePayload {
 				rpcClient = bb.ConnectRPCClientWithRetries(rpcEndpoint, 5, timeout)
@@ -220,7 +212,7 @@ func main() {
 				}
 			}
 
-			// Connect to WS client
+			
 			wsClient, err := bb.ConnectWSClient(wsEndpoint)
 			if err != nil {
 				slog.Error("Failed to connect to WebSocket client", "error", err)
@@ -237,7 +229,7 @@ func main() {
 				return fmt.Errorf("failed to subscribe to new blocks: %w", err)
 			}
 
-			// Authenticate with private key
+			
 			authAcct, err := bb.AuthenticateAddress(privateKeyHex, wsClient)
 			if err != nil {
 				slog.Error("Failed to authenticate private key", "error", err)
