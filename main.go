@@ -182,7 +182,7 @@ func main() {
 				var err error
 				for {
 					wsEndpoint = promptForInput("Please enter your WebSocket endpoint (starts with ws:// or wss://):")
-					err = validateEndpoint(wsEndpoint)
+					wsEndpoint, err = validateWebSocketURL(wsEndpoint)
 					if err == nil {
 						break
 					}
