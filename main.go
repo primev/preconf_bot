@@ -138,9 +138,8 @@ func main() {
 
 			// If privateKeyHex is missing, prompt interactively
 			if privateKeyHex == "" {
-				fmt.Println("Next, we need your private key to sign transactions.")
-				fmt.Println("Your private key is a 64-character hexadecimal string.")
-				fmt.Println("Make sure this is your own secure key. (We will not share it.)")
+				fmt.Println("A private key is needed to sign transactions.")
+				fmt.Println("A private key is a 64-character hexadecimal string.")
 				fmt.Println()
 				var err error
 				for {
