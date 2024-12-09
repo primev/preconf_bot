@@ -37,7 +37,9 @@ const (
 func promptForInput(prompt string) string {
 	fmt.Printf("%s: ", prompt)
 	var input string
-	fmt.Scanln(&input)
+	if _, err := fmt.Scanln(&input); err != nil {
+		slog.Warn("Error reading input", "error", err)
+	}
 	return input
 }
 
