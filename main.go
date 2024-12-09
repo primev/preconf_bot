@@ -31,6 +31,7 @@ const (
 	FlagBidAmountStdDevPercentage = "bid-amount-std-dev-percentage"
 	FlagNumBlob                   = "num-blob"
 	FlagDefaultTimeout            = "default-timeout"
+	FlagRunDurationMinutes        = "run-duration-minutes"
 )
 
 func promptForInput(prompt string) string {
@@ -102,6 +103,7 @@ func main() {
 			fmt.Println("  --bid-amount-std-dev-percentage  Std dev percentage of bid amount, default 100.0")
 			fmt.Println("  --num-blob           Number of blob transactions to send, default 0 makes the tx an eth transfer")
 			fmt.Println("  --default-timeout     Default timeout in seconds, default 15")
+			fmt.Println("  --run-duration-minutes  Duration to run the bidder in minutes (0 for infinite)")
 			fmt.Println("")
 			fmt.Println("You can also set environment variables like WS_ENDPOINT and PRIVATE_KEY.")
 			fmt.Println("For more details, check the documentation: https://docs.primev.xyz/get-started/bidders/best-practices")
@@ -155,6 +157,14 @@ func main() {
 			numBlob := c.Uint(FlagNumBlob)
 			defaultTimeoutSeconds := c.Uint(FlagDefaultTimeout)
 			defaultTimeout := time.Duration(defaultTimeoutSeconds) * time.Second
+			runDurationMinutes := c.Uint(FlagRunDurationMinutes)
+			var endTime time.Time
+			if runDurationMinutes > 0 {
+				endTime = time.Now().Add(time.Duration(runDurationMinutes) * time.Minute)
+				slog.Info("Bidder will run until", "endTime", endTime)
+			} else {
+				slog.Info("Bidder will run indefinitely")
+			}
 
 			
 			fmt.Println("Great! Here's what we have:")
@@ -166,6 +176,11 @@ func main() {
 			fmt.Printf(" - Standard Deviation: %f%%\n", stdDevPercentage)
 			fmt.Printf(" - Number of Blobs: %d\n", numBlob)
 			fmt.Printf(" - Default Timeout: %d seconds\n", defaultTimeoutSeconds)
+			if runDurationMinutes > 0 {
+				fmt.Printf(" - Run Duration: %d minutes\n", runDurationMinutes)
+			} else {
+				fmt.Printf(" - Run Duration: infinite\n")
+			}
 			fmt.Println()
 			fmt.Println("We will now connect to the blockchain and start sending transactions.")
 			fmt.Println("Please wait...")
@@ -237,6 +252,11 @@ func main() {
 			}
 
 			for {
+				if runDurationMinutes > 0 && time.Now().After(endTime) {
+					slog.Info("Run duration reached, shutting down")
+					return nil
+				}
+
 				select {
 				case err := <-sub.Err():
 					slog.Warn("Subscription error", "error", err)
@@ -362,6 +382,12 @@ func main() {
 				Usage:   "Default timeout in seconds",
 				EnvVars: []string{"DEFAULT_TIMEOUT"},
 				Value:   15,
+			},
+			&cli.UintFlag{
+				Name:    FlagRunDurationMinutes,
+				Usage:   "Duration to run the bidder in minutes (0 for infinite)",
+				EnvVars: []string{"RUN_DURATION_MINUTES"},
+				Value:   0,
 			},
 		},
 	}
