@@ -7,6 +7,7 @@ import (
 	"math"
 	"math/big"
 	"math/rand"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -57,15 +58,35 @@ func promptForInput(prompt string) string {
 	return input
 }
 
-func validateEndpoint(input string) error {
-	if input == "" {
-		return fmt.Errorf("endpoint cannot be empty")
-	}
-	if !strings.HasPrefix(input, "ws://") && !strings.HasPrefix(input, "wss://") {
-		return fmt.Errorf("endpoint must start with ws:// or wss://")
-	}
-	return nil
+func validateWebSocketURL(input string) (string, error) {
+    if input == "" {
+        return "", fmt.Errorf("endpoint cannot be empty")
+    }
+
+    // If no scheme is provided, default to "ws://"
+    if !strings.Contains(input, "://") {
+        input = "ws://" + input
+    }
+
+    // Parse the URL to ensure it's valid
+    parsedURL, err := url.Parse(input)
+    if err != nil {
+        return "", fmt.Errorf("invalid URL format: %v", err)
+    }
+
+    // Ensure the scheme is valid for WebSocket connections
+    if parsedURL.Scheme != "ws" && parsedURL.Scheme != "wss" {
+        return "", fmt.Errorf("invalid scheme: %s (only ws:// or wss:// are supported)", parsedURL.Scheme)
+    }
+
+    // Optional: Additional validation for hostname or port
+    if parsedURL.Host == "" {
+        return "", fmt.Errorf("URL must include a host")
+    }
+
+    return parsedURL.String(), nil
 }
+
 
 func validatePrivateKey(input string) error {
 	if len(input) != 64 {
