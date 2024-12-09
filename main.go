@@ -34,23 +34,6 @@ const (
 	FlagDefaultTimeout            = "default-timeout"
 )
 
-func getRequiredParameter(c *cli.Context, flagName, prompt string, validator func(string) error) string {
-	// First check CLI flag
-	value := c.String(flagName)
-	if value != "" {
-		return value
-	}
-
-	// If not provided, prompt user
-	for {
-		value = promptForInput(prompt)
-		if validator == nil || validator(value) == nil {
-			return value
-		}
-		fmt.Printf("Invalid input. Please try again.\n")
-	}
-}
-
 func promptForInput(prompt string) string {
 	fmt.Printf("%s: ", prompt)
 	var input string
@@ -59,34 +42,32 @@ func promptForInput(prompt string) string {
 }
 
 func validateWebSocketURL(input string) (string, error) {
-    if input == "" {
-        return "", fmt.Errorf("endpoint cannot be empty")
-    }
+	if input == "" {
+		return "", fmt.Errorf("endpoint cannot be empty")
+	}
 
-    // If no scheme is provided, default to "ws://"
-    if !strings.Contains(input, "://") {
-        input = "ws://" + input
-    }
+	// If no scheme is provided, default to "ws://"
+	if !strings.Contains(input, "://") {
+		input = "ws://" + input
+	}
 
-    // Parse the URL to ensure it's valid
-    parsedURL, err := url.Parse(input)
-    if err != nil {
-        return "", fmt.Errorf("invalid URL format: %v", err)
-    }
+	// Parse the URL to ensure it's valid
+	parsedURL, err := url.Parse(input)
+	if err != nil {
+		return "", fmt.Errorf("invalid URL format: %v", err)
+	}
 
-    // Ensure the scheme is valid for WebSocket connections
-    if parsedURL.Scheme != "ws" && parsedURL.Scheme != "wss" {
-        return "", fmt.Errorf("invalid scheme: %s (only ws:// or wss:// are supported)", parsedURL.Scheme)
-    }
+	// Ensure the scheme is valid for WebSocket connections
+	if parsedURL.Scheme != "ws" && parsedURL.Scheme != "wss" {
+		return "", fmt.Errorf("invalid scheme: %s (only ws:// or wss:// are supported)", parsedURL.Scheme)
+	}
 
-    // Optional: Additional validation for hostname or port
-    if parsedURL.Host == "" {
-        return "", fmt.Errorf("URL must include a host")
-    }
+	if parsedURL.Host == "" {
+		return "", fmt.Errorf("URL must include a host")
+	}
 
-    return parsedURL.String(), nil
+	return parsedURL.String(), nil
 }
-
 
 func validatePrivateKey(input string) error {
 	if len(input) != 64 {
@@ -98,112 +79,80 @@ func validatePrivateKey(input string) error {
 func main() {
 	// Initialize the slog logger with JSON handler and set log level to Info
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level:      slog.LevelInfo,
-		AddSource:  true,
+		Level:     slog.LevelInfo,
+		AddSource: true,
 	}))
 	slog.SetDefault(logger)
 
 	app := &cli.App{
 		Name:  "Preconf Bidder",
-		Usage: "A tool for bidding in mev-commit preconfirmation auctions for blobs and transactions. As a non dev user, I want to be prompted in human readable way to fill in required variables",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    FlagEnv,
-				Usage:   "Path to .env file",
-				EnvVars: []string{"ENV_FILE"},
-			},
-			&cli.StringFlag{
-				Name:    FlagBidderAddress,
-				Usage:   "Address of the bidder",
-				EnvVars: []string{"BIDDER_ADDRESS"},
-				Value:   "localhost:13524",
-			},
-			&cli.BoolFlag{
-				Name:    FlagUsePayload,
-				Usage:   "Use payload for transactions",
-				EnvVars: []string{"USE_PAYLOAD"},
-				Value:   true,
-			},
-			&cli.StringFlag{
-				Name:     FlagRpcEndpoint,
-				Usage:    "RPC endpoint when use-payload is false",
-				EnvVars:  []string{"RPC_ENDPOINT"},
-				Required: false,
-			},
-			&cli.StringFlag{
-				Name:     FlagWsEndpoint,
-				Usage:    "WebSocket endpoint for transactions",
-				EnvVars:  []string{"WS_ENDPOINT"},
-				Required: false,
-			},
-			&cli.StringFlag{
-				Name:      FlagPrivateKey,
-				Usage:     "Private key for signing transactions",
-				EnvVars:   []string{"PRIVATE_KEY"},
-				Required:  false,
-				Hidden:    true,
-				TakesFile: false,
-			},
-			&cli.Uint64Flag{
-				Name:    FlagOffset,
-				Usage:   "Offset value for transactions",
-				EnvVars: []string{"OFFSET"},
-				Value:   1,
-			},
-			&cli.Float64Flag{
-				Name:    FlagBidAmount,
-				Usage:   "Amount to bid",
-				EnvVars: []string{"BID_AMOUNT"},
-				Value:   0.001,
-			},
-			&cli.Float64Flag{
-				Name:    FlagBidAmountStdDevPercentage,
-				Usage:   "Standard deviation percentage for bid amount",
-				EnvVars: []string{"BID_AMOUNT_STD_DEV_PERCENTAGE"},
-				Value:   100.0,
-			},
-			&cli.UintFlag{
-				Name:    FlagNumBlob,
-				Usage:   "Number of blobs to send (0 for ETH transfer)",
-				EnvVars: []string{"NUM_BLOB"},
-				Value:   0,
-			},
-			&cli.UintFlag{
-				Name:    FlagDefaultTimeout,
-				Usage:   "Default timeout in seconds",
-				EnvVars: []string{"DEFAULT_TIMEOUT"},
-				Value:   15, // Default to 15 seconds
-			},
-		},
+		Usage: "A tool for bidding in mev-commit preconfirmation auctions for blobs and transactions.",
 		Action: func(c *cli.Context) error {
-			// Interactive prompts for required parameters
+			fmt.Println("-----------------------------------------------------------------------------------------------")
+			fmt.Println("Welcome to Preconf Bidder!")
+			fmt.Println("")
+			fmt.Println("This is a quickstart tool to make preconf bids on mev-commit chain.")
+			fmt.Println("")
+			fmt.Println("If you already know what you're doing, you can skip the prompts by providing flags upfront.")
+			fmt.Println("For example:")
+			fmt.Println("  ./biddercli --private-key <your_64_char_hex_key> --ws-endpoint wss://your-node.com/ws")
+			fmt.Println("")
+			fmt.Println("Available flags include:")
+			fmt.Println("  --private-key        Your private key for signing transactions (64 hex chars)")
+			fmt.Println("  --ws-endpoint        The WebSocket endpoint for your Ethereum node")
+			fmt.Println("  --rpc-endpoint       The RPC endpoint if not using payload")
+			fmt.Println("  --bid-amount         The amount to bid (in ETH), default 0.001")
+			fmt.Println("  --bid-amount-std-dev-percentage  Std dev percentage of bid amount, default 100.0")
+			fmt.Println("  --num-blob           Number of blob transactions to send, default 0 makes the tx an eth transfer")
+			fmt.Println("  --default-timeout     Default timeout in seconds, default 15")
+			fmt.Println("")
+			fmt.Println("You can also set environment variables like WS_ENDPOINT and PRIVATE_KEY.")
+			fmt.Println("For more details, check the documentation: https://docs.primev.xyz/get-started/bidders/best-practices")
+			fmt.Println("-----------------------------------------------------------------------------------------------")
+			fmt.Println()
+			
+
+			// Start by trying to read values from flags/env
 			wsEndpoint := c.String(FlagWsEndpoint)
+			privateKeyHex := c.String(FlagPrivateKey)
+
+			// If wsEndpoint is missing, prompt interactively
 			if wsEndpoint == "" {
+				fmt.Println("First, we need the WebSocket endpoint for your Ethereum node.")
+				fmt.Println("This is where we'll connect to receive real-time blockchain updates.")
+				fmt.Println("For example: wss://your-node-provider.com/ws")
+				fmt.Println()
 				var err error
 				for {
-					wsEndpoint = promptForInput("Please enter your WebSocket endpoint (starts with ws:// or wss://):")
+					wsEndpoint = promptForInput("Please enter your WebSocket endpoint")
 					wsEndpoint, err = validateWebSocketURL(wsEndpoint)
 					if err == nil {
 						break
 					}
-					fmt.Printf("Error: %s\nPlease try again.\n", err)
+					fmt.Printf("Error: %s\nPlease try again.\n\n", err)
 				}
+				fmt.Println() // Add a blank line after successful input
 			}
 
-			privateKeyHex := c.String(FlagPrivateKey)
+			// If privateKeyHex is missing, prompt interactively
 			if privateKeyHex == "" {
+				fmt.Println("Next, we need your private key to sign transactions.")
+				fmt.Println("Your private key is a 64-character hexadecimal string.")
+				fmt.Println("Make sure this is your own secure key. (We will not share it.)")
+				fmt.Println()
 				var err error
 				for {
-					privateKeyHex = promptForInput("Please enter your private key (64 hex characters):")
+					privateKeyHex = promptForInput("Please enter your private key")
 					err = validatePrivateKey(privateKeyHex)
 					if err == nil {
 						break
 					}
-					fmt.Printf("Error: %s\nPlease try again.\n", err)
+					fmt.Printf("Error: %s\nPlease try again.\n\n", err)
 				}
+				fmt.Println() // Add a blank line after successful input
 			}
 
-			// Get other parameters from flags as before
+			// Get other parameters from flags or environment
 			bidderAddress := c.String(FlagBidderAddress)
 			usePayload := c.Bool(FlagUsePayload)
 			rpcEndpoint := c.String(FlagRpcEndpoint)
@@ -214,7 +163,22 @@ func main() {
 			defaultTimeoutSeconds := c.Uint(FlagDefaultTimeout)
 			defaultTimeout := time.Duration(defaultTimeoutSeconds) * time.Second
 
-			// Log the defaultTimeout value
+			// Print a summary to the user before proceeding
+			fmt.Println("Great! Here's what we have:")
+			fmt.Printf(" - WebSocket Endpoint: %s\n", wsEndpoint)
+			fmt.Printf(" - Private Key: Provided (hidden)\n")
+			fmt.Printf(" - Bidder Address: %s\n", bidderAddress)
+			fmt.Printf(" - Use Payload: %v\n", usePayload)
+			fmt.Printf(" - Bid Amount: %f ETH\n", bidAmount)
+			fmt.Printf(" - Standard Deviation: %f%%\n", stdDevPercentage)
+			fmt.Printf(" - Number of Blobs: %d\n", numBlob)
+			fmt.Printf(" - Default Timeout: %d seconds\n", defaultTimeoutSeconds)
+			fmt.Println()
+			fmt.Println("We will now connect to the blockchain and start sending transactions.")
+			fmt.Println("Please wait...")
+			fmt.Println()
+
+			// Log configuration values (for debugging / dev)
 			slog.Info("Configuration values",
 				"bidderAddress", bidderAddress,
 				"rpcEndpoint", bb.MaskEndpoint(rpcEndpoint),
@@ -240,7 +204,7 @@ func main() {
 
 			slog.Info("Connected to mev-commit client")
 
-			timeout := defaultTimeout // Use the defaultTimeout here
+			timeout := defaultTimeout
 
 			// Only connect to the RPC client if usePayload is false
 			var rpcClient *ethclient.Client
@@ -303,7 +267,6 @@ func main() {
 						slog.Info("Transaction sent successfully")
 					}
 
-					// Check for errors before using signedTx
 					if err != nil {
 						slog.Error("Failed to execute transaction", "error", err)
 					}
@@ -314,24 +277,13 @@ func main() {
 						"hash", header.Hash().String(),
 					)
 
-					// Compute standard deviation in ETH
 					stdDev := bidAmount * stdDevPercentage / 100.0
-
-					// Generate random amount with normal distribution
 					randomEthAmount := rand.NormFloat64()*stdDev + bidAmount
-
-					// use max(randomEthAmount, bidAmount) to ensure value is positive
 					randomEthAmount = math.Max(randomEthAmount, bidAmount)
 
 					if usePayload {
-						// If use-payload is true, send the transaction payload to mev-commit. Don't send bundle
-						if numBlob == 0 {
-							bb.SendPreconfBid(bidderClient, signedTx, int64(blockNumber), randomEthAmount)
-						} else {
-							bb.SendPreconfBid(bidderClient, signedTx, int64(blockNumber), randomEthAmount)
-						}
+						bb.SendPreconfBid(bidderClient, signedTx, int64(blockNumber), randomEthAmount)
 					} else {
-						// Send as a flashbots bundle and send the preconf bid with the transaction hash
 						_, err = ee.SendBundle(rpcEndpoint, signedTx, blockNumber)
 						if err != nil {
 							slog.Error("Failed to send transaction",
@@ -342,17 +294,85 @@ func main() {
 						bb.SendPreconfBid(bidderClient, signedTx.Hash().String(), int64(blockNumber), randomEthAmount)
 					}
 
-					// Handle ExecuteBlob error
 					if err != nil {
 						slog.Error("Failed to execute transaction", "error", err)
-						continue // Skip to the next iteration
+						continue
 					}
 				}
 			}
 		},
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    FlagEnv,
+				Usage:   "Path to .env file",
+				EnvVars: []string{"ENV_FILE"},
+			},
+			&cli.StringFlag{
+				Name:    FlagBidderAddress,
+				Usage:   "Address of the bidder",
+				EnvVars: []string{"BIDDER_ADDRESS"},
+				Value:   "localhost:13524",
+			},
+			&cli.BoolFlag{
+				Name:    FlagUsePayload,
+				Usage:   "Use payload for transactions",
+				EnvVars: []string{"USE_PAYLOAD"},
+				Value:   true,
+			},
+			&cli.StringFlag{
+				Name:     FlagRpcEndpoint,
+				Usage:    "RPC endpoint when use-payload is false",
+				EnvVars:  []string{"RPC_ENDPOINT"},
+				Required: false,
+			},
+			&cli.StringFlag{
+				Name:     FlagWsEndpoint,
+				Usage:    "WebSocket endpoint for transactions",
+				EnvVars:  []string{"WS_ENDPOINT"},
+				Value:    "wss://ethereum-holesky-rpc.publicnode.com",
+				Required: false,
+			},
+			&cli.StringFlag{
+				Name:      FlagPrivateKey,
+				Usage:     "Private key for signing transactions",
+				EnvVars:   []string{"PRIVATE_KEY"},
+				Required:  false,
+				Hidden:    true,
+				TakesFile: false,
+			},
+			&cli.Uint64Flag{
+				Name:    FlagOffset,
+				Usage:   "Offset value for transactions",
+				EnvVars: []string{"OFFSET"},
+				Value:   1,
+			},
+			&cli.Float64Flag{
+				Name:    FlagBidAmount,
+				Usage:   "Amount to bid",
+				EnvVars: []string{"BID_AMOUNT"},
+				Value:   0.001,
+			},
+			&cli.Float64Flag{
+				Name:    FlagBidAmountStdDevPercentage,
+				Usage:   "Standard deviation percentage for bid amount",
+				EnvVars: []string{"BID_AMOUNT_STD_DEV_PERCENTAGE"},
+				Value:   100.0,
+			},
+			&cli.UintFlag{
+				Name:    FlagNumBlob,
+				Usage:   "Number of blobs to send (0 for ETH transfer)",
+				EnvVars: []string{"NUM_BLOB"},
+				Value:   0,
+			},
+			&cli.UintFlag{
+				Name:    FlagDefaultTimeout,
+				Usage:   "Default timeout in seconds",
+				EnvVars: []string{"DEFAULT_TIMEOUT"},
+				Value:   15,
+			},
+		},
 	}
 
-	// Run the app
 	if err := app.Run(os.Args); err != nil {
 		slog.Error("Application error", "error", err)
 		os.Exit(1)
