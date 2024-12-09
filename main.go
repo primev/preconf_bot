@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/core/types"
@@ -32,6 +33,47 @@ const (
 	FlagDefaultTimeout            = "default-timeout"
 )
 
+func getRequiredParameter(c *cli.Context, flagName, prompt string, validator func(string) error) string {
+	// First check CLI flag
+	value := c.String(flagName)
+	if value != "" {
+		return value
+	}
+
+	// If not provided, prompt user
+	for {
+		value = promptForInput(prompt)
+		if validator == nil || validator(value) == nil {
+			return value
+		}
+		fmt.Printf("Invalid input. Please try again.\n")
+	}
+}
+
+func promptForInput(prompt string) string {
+	fmt.Printf("%s: ", prompt)
+	var input string
+	fmt.Scanln(&input)
+	return input
+}
+
+func validateEndpoint(input string) error {
+	if input == "" {
+		return fmt.Errorf("endpoint cannot be empty")
+	}
+	if !strings.HasPrefix(input, "ws://") && !strings.HasPrefix(input, "wss://") {
+		return fmt.Errorf("endpoint must start with ws:// or wss://")
+	}
+	return nil
+}
+
+func validatePrivateKey(input string) error {
+	if len(input) != 64 {
+		return fmt.Errorf("private key must be 64 hex characters")
+	}
+	return nil
+}
+
 func main() {
 	// Initialize the slog logger with JSON handler and set log level to Info
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
@@ -42,7 +84,7 @@ func main() {
 
 	app := &cli.App{
 		Name:  "Preconf Bidder",
-		Usage: "A tool for bidding in mev-commit preconfirmation auctions for blobs and transactions",
+		Usage: "A tool for bidding in mev-commit preconfirmation auctions for blobs and transactions. As a non dev user, I want to be prompted in human readable way to fill in required variables",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    FlagEnv,
@@ -53,7 +95,7 @@ func main() {
 				Name:    FlagBidderAddress,
 				Usage:   "Address of the bidder",
 				EnvVars: []string{"BIDDER_ADDRESS"},
-				Value:   "mev-commit-bidder:13524",
+				Value:   "localhost:13524",
 			},
 			&cli.BoolFlag{
 				Name:    FlagUsePayload,
@@ -71,13 +113,13 @@ func main() {
 				Name:     FlagWsEndpoint,
 				Usage:    "WebSocket endpoint for transactions",
 				EnvVars:  []string{"WS_ENDPOINT"},
-				Required: true,
+				Required: false,
 			},
 			&cli.StringFlag{
 				Name:      FlagPrivateKey,
 				Usage:     "Private key for signing transactions",
 				EnvVars:   []string{"PRIVATE_KEY"},
-				Required:  true,
+				Required:  false,
 				Hidden:    true,
 				TakesFile: false,
 			},
@@ -113,12 +155,37 @@ func main() {
 			},
 		},
 		Action: func(c *cli.Context) error {
-			// Retrieve flag values using constants
+			// Interactive prompts for required parameters
+			wsEndpoint := c.String(FlagWsEndpoint)
+			if wsEndpoint == "" {
+				var err error
+				for {
+					wsEndpoint = promptForInput("Please enter your WebSocket endpoint (starts with ws:// or wss://):")
+					err = validateEndpoint(wsEndpoint)
+					if err == nil {
+						break
+					}
+					fmt.Printf("Error: %s\nPlease try again.\n", err)
+				}
+			}
+
+			privateKeyHex := c.String(FlagPrivateKey)
+			if privateKeyHex == "" {
+				var err error
+				for {
+					privateKeyHex = promptForInput("Please enter your private key (64 hex characters):")
+					err = validatePrivateKey(privateKeyHex)
+					if err == nil {
+						break
+					}
+					fmt.Printf("Error: %s\nPlease try again.\n", err)
+				}
+			}
+
+			// Get other parameters from flags as before
 			bidderAddress := c.String(FlagBidderAddress)
 			usePayload := c.Bool(FlagUsePayload)
 			rpcEndpoint := c.String(FlagRpcEndpoint)
-			wsEndpoint := c.String(FlagWsEndpoint)
-			privateKeyHex := c.String(FlagPrivateKey)
 			offset := c.Uint64(FlagOffset)
 			bidAmount := c.Float64(FlagBidAmount)
 			stdDevPercentage := c.Float64(FlagBidAmountStdDevPercentage)
