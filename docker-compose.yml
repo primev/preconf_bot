@@ -9,9 +9,14 @@ services:
       - RPC_ENDPOINT=${RPC_ENDPOINT}
       - WS_ENDPOINT=${WS_ENDPOINT}
       - USE_PAYLOAD=${USE_PAYLOAD}
-      - BIDDER_ADDRESS=${BIDDER_ADDRESS}
-      - SERVICE_ADDRESS=mev-commit-bidder:13524
+      - SERVER_ADDRESS=${SERVER_ADDRESS}
+      - OFFSET=${OFFSET}
       - NUM_BLOB=${NUM_BLOB}
+      - BID_AMOUNT=${BID_AMOUNT}
+      - BID_AMOUNT_STD_DEV_PERCENTAGE=${BID_AMOUNT_STD_DEV_PERCENTAGE}
+      - DEFAULT_TIMEOUT=${DEFAULT_TIMEOUT}
+      - APP_NAME=${APP_NAME}
+      - VERSION=${VERSION}
 networks:
   app-network:
     external: true

@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
 	"math/big"
@@ -21,7 +23,7 @@ import (
 
 const (
 	FlagEnv                       = "env"
-	FlagBidderAddress             = "bidder-address"
+	FlagServerAddress             = "server-address"
 	FlagUsePayload                = "use-payload"
 	FlagRpcEndpoint               = "rpc-endpoint"
 	FlagWsEndpoint                = "ws-endpoint"
@@ -32,8 +34,13 @@ const (
 	FlagNumBlob                   = "num-blob"
 	FlagDefaultTimeout            = "default-timeout"
 	FlagRunDurationMinutes        = "run-duration-minutes"
+
+	// New flags for AppName and Version
+	FlagAppName = "app-name"
+	FlagVersion = "version"
 )
 
+// promptForInput prompts the user for input and returns the entered string
 func promptForInput(prompt string) string {
 	fmt.Printf("%s: ", prompt)
 	var input string
@@ -43,6 +50,7 @@ func promptForInput(prompt string) string {
 	return input
 }
 
+// validateWebSocketURL validates and formats the WebSocket URL
 func validateWebSocketURL(input string) (string, error) {
 	if input == "" {
 		return "", fmt.Errorf("endpoint cannot be empty")
@@ -68,6 +76,7 @@ func validateWebSocketURL(input string) (string, error) {
 	return parsedURL.String(), nil
 }
 
+// validatePrivateKey ensures the private key is a 64-character hexadecimal string
 func validatePrivateKey(input string) error {
 	if len(input) != 64 {
 		return fmt.Errorf("private key must be 64 hex characters")
@@ -76,16 +85,25 @@ func validatePrivateKey(input string) error {
 }
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level:     slog.LevelInfo,
-		AddSource: true,
-	}))
-	slog.SetDefault(logger)
-
 	app := &cli.App{
 		Name:  "Preconf Bidder",
-		Usage: "A tool for bidding in mev-commit preconfirmation auctions for blobs and transactions.",
+		Usage: "A tool for bidding in mev-commit preconfirmation auctions for blobs and eth transfers.",
 		Action: func(c *cli.Context) error {
+			// Retrieve AppName and Version from flags or environment variables
+			appName := c.String(FlagAppName)
+			version := c.String(FlagVersion)
+
+			// Initialize the custom pretty-print JSON handler with INFO level
+			handler := NewCustomJSONHandler(os.Stderr, slog.LevelInfo)
+
+			// Add default attributes to every log entry
+			logger := slog.New(handler).With(
+				slog.String("app", appName),
+				slog.String("version", version),
+			)
+
+			slog.SetDefault(logger)
+
 			fmt.Println("-----------------------------------------------------------------------------------------------")
 			fmt.Println("Welcome to Preconf Bidder!")
 			fmt.Println("")
@@ -96,20 +114,21 @@ func main() {
 			fmt.Println("  ./biddercli --private-key <your_64_char_hex_key> --ws-endpoint wss://your-node.com/ws")
 			fmt.Println("")
 			fmt.Println("Available flags include:")
-			fmt.Println("  --private-key        Your private key for signing transactions (64 hex chars)")
-			fmt.Println("  --ws-endpoint        The WebSocket endpoint for your Ethereum node")
-			fmt.Println("  --rpc-endpoint       The RPC endpoint if not using payload")
-			fmt.Println("  --bid-amount         The amount to bid (in ETH), default 0.001")
+			fmt.Println("  --private-key            Your private key for signing transactions (64 hex chars)")
+			fmt.Println("  --ws-endpoint            The WebSocket endpoint for your Ethereum node")
+			fmt.Println("  --rpc-endpoint           The RPC endpoint if not using payload")
+			fmt.Println("  --bid-amount             The amount to bid (in ETH), default 0.001")
 			fmt.Println("  --bid-amount-std-dev-percentage  Std dev percentage of bid amount, default 100.0")
-			fmt.Println("  --num-blob           Number of blob transactions to send, default 0 makes the tx an eth transfer")
-			fmt.Println("  --default-timeout     Default timeout in seconds, default 15")
-			fmt.Println("  --run-duration-minutes  Duration to run the bidder in minutes (0 for infinite)")
+	fmt.Println("  --num-blob                       Number of blob transactions to send, default 0 makes the tx an eth transfer")
+			fmt.Println("  --default-timeout        Default client context timeout in seconds, default 15")
+			fmt.Println("  --run-duration-minutes   Duration to run the bidder in minutes (0 for infinite)")
+			fmt.Println("  --app-name               Application name for logging")
+			fmt.Println("  --version                Application version for logging")
 			fmt.Println("")
 			fmt.Println("You can also set environment variables like WS_ENDPOINT and PRIVATE_KEY.")
 			fmt.Println("For more details, check the documentation: https://docs.primev.xyz/get-started/bidders/best-practices")
 			fmt.Println("-----------------------------------------------------------------------------------------------")
 			fmt.Println()
-			
 
 			wsEndpoint := c.String(FlagWsEndpoint)
 			privateKeyHex := c.String(FlagPrivateKey)
@@ -147,8 +166,7 @@ func main() {
 				fmt.Println()
 			}
 
-			
-			bidderAddress := c.String(FlagBidderAddress)
+			serverAddress := c.String(FlagServerAddress)
 			usePayload := c.Bool(FlagUsePayload)
 			rpcEndpoint := c.String(FlagRpcEndpoint)
 			offset := c.Uint64(FlagOffset)
@@ -166,11 +184,10 @@ func main() {
 				slog.Info("Bidder will run indefinitely")
 			}
 
-			
 			fmt.Println("Great! Here's what we have:")
-			fmt.Printf(" - WebSocket Endpoint: %s\n", wsEndpoint)
+			fmt.Printf(" - WebSocket Endpoint: (hidden)\n")
 			fmt.Printf(" - Private Key: Provided (hidden)\n")
-			fmt.Printf(" - Bidder Address: %s\n", bidderAddress)
+			fmt.Printf(" - Server Address: %s\n", serverAddress)
 			fmt.Printf(" - Use Payload: %v\n", usePayload)
 			fmt.Printf(" - Bid Amount: %f ETH\n", bidAmount)
 			fmt.Printf(" - Standard Deviation: %f%%\n", stdDevPercentage)
@@ -186,9 +203,10 @@ func main() {
 			fmt.Println("Please wait...")
 			fmt.Println()
 
-			
 			slog.Info("Configuration values",
-				"bidderAddress", bidderAddress,
+				"appName", appName,
+				"version", version,
+				"serverAddress", serverAddress,
 				"rpcEndpoint", bb.MaskEndpoint(rpcEndpoint),
 				"wsEndpoint", bb.MaskEndpoint(wsEndpoint),
 				"offset", offset,
@@ -201,7 +219,7 @@ func main() {
 			)
 
 			cfg := bb.BidderConfig{
-				ServerAddress: bidderAddress,
+				ServerAddress: serverAddress,
 			}
 
 			bidderClient, err := bb.NewBidderClient(cfg)
@@ -214,7 +232,6 @@ func main() {
 
 			timeout := defaultTimeout
 
-			
 			var rpcClient *ethclient.Client
 			if !usePayload {
 				rpcClient = bb.ConnectRPCClientWithRetries(rpcEndpoint, 5, timeout)
@@ -227,7 +244,6 @@ func main() {
 				}
 			}
 
-			
 			wsClient, err := bb.ConnectWSClient(wsEndpoint)
 			if err != nil {
 				slog.Error("Failed to connect to WebSocket client", "error", err)
@@ -244,7 +260,6 @@ func main() {
 				return fmt.Errorf("failed to subscribe to new blocks: %w", err)
 			}
 
-			
 			authAcct, err := bb.AuthenticateAddress(privateKeyHex, wsClient)
 			if err != nil {
 				slog.Error("Failed to authenticate private key", "error", err)
@@ -321,9 +336,9 @@ func main() {
 				EnvVars: []string{"ENV_FILE"},
 			},
 			&cli.StringFlag{
-				Name:    FlagBidderAddress,
-				Usage:   "Address of the bidder",
-				EnvVars: []string{"BIDDER_ADDRESS"},
+				Name:    FlagServerAddress,
+				Usage:   "Address of the server",
+				EnvVars: []string{"SERVER_ADDRESS"},
 				Value:   "localhost:13524",
 			},
 			&cli.BoolFlag{
@@ -355,13 +370,13 @@ func main() {
 			},
 			&cli.Uint64Flag{
 				Name:    FlagOffset,
-				Usage:   "Offset value for transactions",
+				Usage:   "Offset is how many blocks ahead to bid for the preconf transaction",
 				EnvVars: []string{"OFFSET"},
 				Value:   1,
 			},
 			&cli.Float64Flag{
 				Name:    FlagBidAmount,
-				Usage:   "Amount to bid",
+				Usage:   "Amount to bid (in ETH)",
 				EnvVars: []string{"BID_AMOUNT"},
 				Value:   0.001,
 			},
@@ -385,9 +400,21 @@ func main() {
 			},
 			&cli.UintFlag{
 				Name:    FlagRunDurationMinutes,
-				Usage:   "Duration to run the bidder in minutes (0 for infinite)",
+				Usage:   "Duration to run the bidder in minutes (0 to run indefinitely)",
 				EnvVars: []string{"RUN_DURATION_MINUTES"},
 				Value:   0,
+			},
+			&cli.StringFlag{
+				Name:    FlagAppName,
+				Usage:   "Application name, for logging purposes",
+				EnvVars: []string{"APP_NAME"},
+				Value:   "preconf_bidder",
+			},
+			&cli.StringFlag{
+				Name:    FlagVersion,
+				Usage:   "mev-commit version, for logging purposes",
+				EnvVars: []string{"VERSION"},
+				Value:   "0.8.0",
 			},
 		},
 	}
@@ -396,4 +423,66 @@ func main() {
 		slog.Error("Application error", "error", err)
 		os.Exit(1)
 	}
+}
+
+// CustomJSONHandler is a custom slog.Handler that formats logs as pretty-printed JSON with customized timestamp
+type CustomJSONHandler struct {
+	encoder *json.Encoder
+	level   slog.Level
+}
+
+// NewCustomJSONHandler creates a new instance of CustomJSONHandler
+func NewCustomJSONHandler(w io.Writer, level slog.Level) *CustomJSONHandler {
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ") // Set indentation for pretty-printing
+	return &CustomJSONHandler{
+		encoder: encoder,
+		level:   level,
+	}
+}
+
+// Handle processes each log record
+func (h *CustomJSONHandler) Handle(ctx context.Context, r slog.Record) error {
+	if r.Level < h.level {
+		return nil // Skip logs below the set level
+	}
+
+	// Create a map to hold the log entry
+	logEntry := make(map[string]interface{})
+
+	// Customize the timestamp to include only milliseconds
+	logEntry["time"] = r.Time.Format("2006-01-02T15:04:05.000Z07:00") // RFC3339 with milliseconds
+
+	// Set the log level
+	logEntry["level"] = r.Level.String()
+
+	// Set the message
+	logEntry["msg"] = r.Message
+
+	// Add all other attributes
+	r.Attrs(func(attr slog.Attr) bool {
+		logEntry[attr.Key] = attr.Value.Any()
+		return true
+	})
+
+	// Encode the log entry as pretty JSON
+	return h.encoder.Encode(logEntry)
+}
+
+// Enabled checks if the handler is enabled for the given level
+func (h *CustomJSONHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return level >= h.level
+}
+
+// WithAttrs returns a new handler with the given attributes
+func (h *CustomJSONHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	// Create a new handler and copy attributes if necessary
+	// Since we're retaining field names, we don't need to handle attrs specially here
+	return h
+}
+
+// WithGroup returns a new handler with the given group name
+func (h *CustomJSONHandler) WithGroup(name string) slog.Handler {
+	// Groups can be handled if needed, but for simplicity, we ignore them here
+	return h
 }
