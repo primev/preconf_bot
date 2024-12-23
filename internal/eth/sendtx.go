@@ -27,10 +27,12 @@ import (
 	"golang.org/x/exp/rand"
 )
 
-var defaultTimeout time.Duration
+var (
+	defaultTimeout time.Duration
+	defaultPriorityFeeGwei = big.NewInt(1) // in wei
+)
 
-// init initializes the defaultTimeout variable by reading the DEFAULT_TIMEOUT
-// environment variable. If not set or invalid, it defaults to 15 seconds.
+// init initializes the defaultTimeout and defaultPriorityFeeGwei variables
 func init() {
 	timeoutStr := os.Getenv("DEFAULT_TIMEOUT")
 	if timeoutStr != "" {
@@ -47,10 +49,24 @@ func init() {
 	} else {
 		defaultTimeout = 15 * time.Second
 	}
+
+	// Initialize priority fee from environment
+	priorityFeeStr := os.Getenv("PRIORITY_FEE_GWEI")
+	if priorityFeeStr != "" {
+		priorityFeeGwei, err := strconv.ParseInt(priorityFeeStr, 10, 64)
+		if err != nil {
+			slog.Default().Warn("Invalid PRIORITY_FEE_GWEI value. Using default of 1 gwei.",
+				slog.String("PRIORITY_FEE_GWEI", priorityFeeStr))
+		} else {
+			defaultPriorityFeeGwei = big.NewInt(priorityFeeGwei)
+			slog.Default().Info("priorityFee loaded from environment",
+				slog.String("priorityFeeGwei", priorityFeeStr))
+		}
+	}
 }
 
 // SelfETHTransfer sends an ETH transfer transaction from the authenticated account.
-func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.Int, offset uint64) (*types.Transaction, uint64, error) {
+func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.Int, offset uint64, priorityFeeGwei *big.Int) (*types.Transaction, uint64, error) {
 	// Set a timeout context
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
@@ -85,14 +101,19 @@ func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.
 	baseFee := header.BaseFee
 	blockNumber := header.Number.Uint64()
 
-	// Create a transaction with a priority fee.
-	priorityFee := big.NewInt(2_000_000_000) // 2 gwei in wei
+	// Use provided priority fee or default
+	priorityFee := defaultPriorityFeeGwei
+	if priorityFeeGwei != nil {
+		priorityFee = new(big.Int).Mul(priorityFeeGwei, big.NewInt(1))
+	}
+
+	// Create a transaction with the specified priority fee
 	maxFee := new(big.Int).Add(baseFee, priorityFee)
 	tx := types.NewTx(&types.DynamicFeeTx{
 		Nonce:     nonce,
 		To:        &authAcct.Address,
 		Value:     value,
-		Gas:       500_000,
+		Gas:       1_000_000,
 		GasFeeCap: maxFee,
 		GasTipCap: priorityFee,
 	})
@@ -115,7 +136,7 @@ func SelfETHTransfer(client *ethclient.Client, authAcct bb.AuthAcct, value *big.
 }
 
 // ExecuteBlobTransaction executes a blob transaction with preconfirmation bids.
-func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numBlobs int, offset uint64) (*types.Transaction, uint64, error) {
+func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numBlobs int, offset uint64, priorityFeeGwei *big.Int) (*types.Transaction, uint64, error) {
 
 	pubKey, ok := authAcct.PrivateKey.Public().(*ecdsa.PublicKey)
 	if !ok || pubKey == nil {
@@ -124,7 +145,7 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 	}
 
 	var (
-		gasLimit    = uint64(500_000)
+		gasLimit    = uint64(1_000_000)
 		blockNumber uint64
 		nonce       uint64
 	)
@@ -182,11 +203,16 @@ func ExecuteBlobTransaction(client *ethclient.Client, authAcct bb.AuthAcct, numB
 	incrementFactor := big.NewInt(110) // 10% increase
 	blobFeeCap.Mul(blobFeeCap, incrementFactor).Div(blobFeeCap, big.NewInt(100))
 
+	// Use provided priority fee or default
+	priorityFee := defaultPriorityFeeGwei
+	if priorityFeeGwei != nil {
+		priorityFee = new(big.Int).Mul(priorityFeeGwei, big.NewInt(1_000_000_000)) // Convert gwei to wei
+	}
+
 	baseFee := header.BaseFee
 	maxFeePerGas := baseFee
-	// Use for nonzero priority fee
-	priorityFee := big.NewInt(5_000_000_000) // 5 gwei in wei
 	maxFeePriority := new(big.Int).Add(maxFeePerGas, priorityFee)
+
 	// Create a new BlobTx transaction
 	tx := types.NewTx(&types.BlobTx{
 		ChainID:    uint256.MustFromBig(chainID),
