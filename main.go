@@ -40,7 +40,7 @@ const (
 	FlagAppName = "app-name"
 	FlagVersion = "version"
 
-	FlagPriorityFeeGwei = "priority-fee-gwei"
+	FlagPriorityFee = "priority-fee"
 )
 
 // promptForInput prompts the user for input and returns the entered string
@@ -202,7 +202,7 @@ func main() {
             fmt.Println("  --ws-endpoint            The WebSocket endpoint for your Ethereum node")
             fmt.Println("  --rpc-endpoint           The RPC endpoint if not using payload")
             fmt.Println("  --bid-amount             The amount to bid (in ETH), default 0.001")
-            fmt.Println("  --priority-fee-gwei      The priority fee in gwei, default 1")
+            fmt.Println("  --priority-fee           The priority fee in wei, default 1")
             fmt.Println("  --bid-amount-std-dev-percentage  Std dev percentage of bid amount, default 100.0")
             fmt.Println("  --num-blob                       Number of blob transactions to send, default 0 makes the tx an eth transfer")
             fmt.Println("  --default-timeout        Default client context timeout in seconds, default 15")
@@ -223,7 +223,7 @@ func main() {
             privateKeyHex := getOrDefault(c, FlagPrivateKey, "PRIVATE_KEY", "") // No default, required
             offset := getOrDefaultUint64(c, FlagOffset, "OFFSET", 1)
             bidAmount := getOrDefaultFloat64(c, FlagBidAmount, "BID_AMOUNT", 0.001)
-            priorityFeeGwei := getOrDefaultUint64(c, FlagPriorityFeeGwei, "PRIORITY_FEE_GWEI", 1)
+            priorityFee := getOrDefaultUint64(c, FlagPriorityFee, "PRIORITY_FEE", 1)
             stdDevPercentage := getOrDefaultFloat64(c, FlagBidAmountStdDevPercentage, "BID_AMOUNT_STD_DEV_PERCENTAGE", 100.0)
             numBlob := getOrDefaultUint(c, FlagNumBlob, "NUM_BLOB", 0)
             defaultTimeoutSeconds := getOrDefaultUint(c, FlagDefaultTimeout, "DEFAULT_TIMEOUT", 15)
@@ -288,7 +288,7 @@ func main() {
             fmt.Printf(" - Server Address: %s\n", serverAddress)
             fmt.Printf(" - Use Payload: %v\n", usePayload)
             fmt.Printf(" - Bid Amount: %f ETH\n", bidAmount)
-			fmt.Printf(" - Priority Fee: %d gwei\n", priorityFeeGwei)
+			fmt.Printf(" - Priority Fee: %d wei\n", priorityFee)
             fmt.Printf(" - Standard Deviation: %f%%\n", stdDevPercentage)
             fmt.Printf(" - Number of Blobs: %d\n", numBlob)
             fmt.Printf(" - Default Timeout: %d seconds\n", defaultTimeoutSeconds)
@@ -311,7 +311,7 @@ func main() {
                 "offset", offset,
                 "usePayload", usePayload,
                 "bidAmount", bidAmount,
-                "priorityFeeGwei", priorityFeeGwei,
+                "priorityFee", priorityFee,
                 "stdDevPercentage", stdDevPercentage,
                 "numBlob", numBlob,
                 "privateKeyProvided", privateKeyHex != "",
@@ -388,10 +388,10 @@ func main() {
                     if numBlob == 0 {
                         // Perform ETH Transfer
                         amount := big.NewInt(1e15)
-                        signedTx, blockNumber, err = ee.SelfETHTransfer(wsClient, authAcct, amount, offset, big.NewInt(int64(priorityFeeGwei)))
+                        signedTx, blockNumber, err = ee.SelfETHTransfer(wsClient, authAcct, amount, offset, big.NewInt(int64(priorityFee)))
                     } else {
                         // Execute Blob Transaction
-                        signedTx, blockNumber, err = ee.ExecuteBlobTransaction(wsClient, authAcct, int(numBlob), offset, big.NewInt(int64(priorityFeeGwei)))
+                        signedTx, blockNumber, err = ee.ExecuteBlobTransaction(wsClient, authAcct, int(numBlob), offset, big.NewInt(int64(priorityFee)))
                     }
 
                     if signedTx == nil {
@@ -522,9 +522,9 @@ func main() {
                 Value:   "0.8.0",
             },
             &cli.Int64Flag{
-                Name:    FlagPriorityFeeGwei,
-                Usage:   "Priority fee in gwei",
-                EnvVars: []string{"PRIORITY_FEE_GWEI"},
+                Name:    FlagPriorityFee,
+                Usage:   "Priority fee in wei",
+                EnvVars: []string{"PRIORITY_FEE"},
                 Value:   1,
             },
         },

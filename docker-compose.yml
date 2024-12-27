@@ -8,13 +8,14 @@ services:
       - PRIVATE_KEY=${PRIVATE_KEY}
       - RPC_ENDPOINT=${RPC_ENDPOINT}
       - WS_ENDPOINT=${WS_ENDPOINT}
-      - USE_PAYLOAD=${USE_PAYLOAD:-true} # Use "true" if USE_PAYLOAD is unset or empty
+      - USE_PAYLOAD=${USE_PAYLOAD:-true}
       - SERVER_ADDRESS=${SERVER_ADDRESS}
       - OFFSET=${OFFSET}
       - NUM_BLOB=${NUM_BLOB}
       - BID_AMOUNT=${BID_AMOUNT}
       - BID_AMOUNT_STD_DEV_PERCENTAGE=${BID_AMOUNT_STD_DEV_PERCENTAGE}
       - DEFAULT_TIMEOUT=${DEFAULT_TIMEOUT}
+      - PRIORITY_FEE=${PRIORITY_FEE}
 networks:
   app-network:
     external: true
