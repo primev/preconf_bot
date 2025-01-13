@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/core/types"
-	pb "github.com/primev/preconf_blob_bidder/internal/bidderpb"
+	pb "github.com/primev/mev-commit/p2p/gen/go/bidderapi/v1"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"

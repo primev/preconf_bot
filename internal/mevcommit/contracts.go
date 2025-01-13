@@ -1,5 +1,4 @@
-// Package mevcommit provides functionality for interacting with the mev-commit protocol,
-// including managing bids, deposits, withdrawals, and event listeners on the Ethereum blockchain.
+// Currently this package is not being used for anything. Leaving in to save the code, but this code has no dependencies on the functionality of the rest of the code. 
 package mevcommit
 
 import (

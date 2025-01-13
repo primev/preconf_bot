@@ -11,7 +11,7 @@ import (
 	"math"
 	"time"
 
-	pb "github.com/primev/preconf_blob_bidder/internal/bidderpb"
+	pb "github.com/primev/mev-commit/p2p/gen/go/bidderapi/v1"
 	"google.golang.org/grpc"
 
 	"github.com/ethereum/go-ethereum"

@@ -14,7 +14,7 @@ import (
 	"log/slog"
 
 	"github.com/ethereum/go-ethereum/core/types"
-	pb "github.com/primev/preconf_blob_bidder/internal/bidderpb"
+	pb "github.com/primev/mev-commit/p2p/gen/go/bidderapi/v1"
 )
 
 // Initialize the logger with JSON format.

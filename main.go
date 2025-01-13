@@ -387,7 +387,7 @@ func main() {
                     var blockNumber uint64
                     if numBlob == 0 {
                         // Perform ETH Transfer
-                        amount := big.NewInt(1e15)
+                        amount := big.NewInt(1e9)
                         signedTx, blockNumber, err = ee.SelfETHTransfer(wsClient, authAcct, amount, offset, big.NewInt(int64(priorityFee)))
                     } else {
                         // Execute Blob Transaction
