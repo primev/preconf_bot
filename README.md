@@ -3,11 +3,11 @@ This repository provides a user friendly CLI interface for making preconfirmatio
 
 Transactions are sent directly to the builder as transaction payloads. Currently a fixed priority fee is used alongside a preconf bid amount.
 
-If you’re an advanced user, you can still skip the interactive mode by specifying all configurations via environment variables, .env files, or command-line flags.
+If you're an advanced user, you can still skip the interactive mode by specifying all configurations via environment variables, .env files, or command-line flags. The CLI is meant to work out of the box for Holesky. For Mainnet, add mainnet websocket.
 
 
 ## Requirements
-- funded L1 address (default is Holesky)
+- funded L1 address
 - funded mev-commit address
 - mev-commit p2p bidder node
 - a good websocket endpoint (a publicly available one is set as default for Holesky, but cannot handle high throughput)
@@ -23,19 +23,20 @@ Then `go mod tiny` to install dependencies.
 ## `.env` variables
 Ensure that the .env file is filled out with all of the variables.
 ```
-RPC_ENDPOINT=rpc_endpoint                   # optional, not needed if `USE_PAYLOAD` is true.
-WS_ENDPOINT=ws_endpoint
-PRIVATE_KEY=private_key                     # L1 private key
-USE_PAYLOAD=true                            # sends tx payload direclty to providers (Default is true).
-SERVER_ADDRESS="localhost:13524"            # address of the server (Default localhost:13524 to run locally)
-OFFSET=1                                    # of blocks in the future to ask for the preconf bid (Default 1 for next block)
-NUM_BLOB=0                                  # blob count of 0 will just send eth transfers (Default 0)
-BID_AMOUNT=0.001                            # preconf bid amount (Default 0.001 ETH)
-PRIORITY_FEE=1                              # priority fee in wei (Default 1 wei)
-BID_AMOUNT_STD_DEV_PERCENTAGE=100           # amount of variation in the preconf bid amount (in %) (Default 100%)
-DEFAULT_TIMEOUT=15                          # default context timeout for the program (Default 15 seconds)
-APP_NAME=preconf_bidder                     # application name for logging purposes (Default name preconf_bidder)
-VERSION=0.8.0                               # mev-commit version for logging purposes (Default version v0.8.0)
+RPC_ENDPOINT=rpc_endpoint                   # RPC endpoint when use-payload is false (optional)
+WS_ENDPOINT=ws_endpoint                     # WebSocket endpoint for transactions (Default wss://ethereum-holesky-rpc.publicnode.com)
+PRIVATE_KEY=private_key                     # Private key for signing transactions
+USE_PAYLOAD=true                            # Use payload for transactions (Default true)
+SERVER_ADDRESS=localhost:13524              # Address of the server (Default localhost:13524)
+OFFSET=1                                    # Offset is how many blocks ahead to bid for the preconf transaction (Default 1)
+NUM_BLOB=0                                  # Number of blobs to send (0 for ETH transfer) (Default 0)
+BID_AMOUNT=0.001                            # Amount to bid in ETH (Default 0.001)
+PRIORITY_FEE=1                              # Priority fee in wei (Default 1)
+BID_AMOUNT_STD_DEV_PERCENTAGE=100           # Standard deviation percentage for bid amount (Default 100.0)
+DEFAULT_TIMEOUT=15                          # Default timeout in seconds (Default 15)
+RUN_DURATION_MINUTES=0                      # Duration to run the bidder in minutes (0 to run indefinitely) (Default 0)
+APP_NAME=preconf_bidder                     # Application name, for logging purposes (Default preconf_bidder)
+VERSION=0.8.0                              # mev-commit version, for logging purposes (Default 0.8.0)
 ```
 ## Ensure Bidder Node is Running
 Ensure that the mev-commit bidder node is running in the background and the autodeposit function deposited ETH into the bidder window. A quickstart can be found [here](https://docs.primev.xyz/get-started/quickstart), which will get the latest mev-commit version and start running it with an auto generated private key. 
