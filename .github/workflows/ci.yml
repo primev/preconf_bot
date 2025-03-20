@@ -32,6 +32,7 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Install dependencies
+        working-directory: ./bot
         run: go mod download
 
       - name: Lint with golangci-lint
@@ -39,6 +40,7 @@ jobs:
         with:
           version: v1.61.0
           args: --timeout 5m
+          working-directory: ./bot
 
       - name: Run tests
         working-directory: ./bot
