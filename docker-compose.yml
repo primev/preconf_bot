@@ -1,9 +1,12 @@
 version: '3'
 services:
   preconf_bot:
-    build: .
+    build: 
+      context: ./bot
     networks:
       - app-network
+    env_file:
+      - ./bot/.env
     environment:
       - PRIVATE_KEY=${PRIVATE_KEY}
       - RPC_ENDPOINT=${RPC_ENDPOINT}
