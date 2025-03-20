@@ -1,5 +1,5 @@
 services:
-  preconf_bot:
+  bot:
     build: 
       context: ./bot
     networks:
@@ -18,5 +18,41 @@ services:
       - BID_AMOUNT_STD_DEV_PERCENTAGE=${BID_AMOUNT_STD_DEV_PERCENTAGE}
       - DEFAULT_TIMEOUT=${DEFAULT_TIMEOUT}
       - PRIORITY_FEE=${PRIORITY_FEE}
+
+  mev-commit-bidder:
+    build: 
+      context: ./bidder
+    env_file:
+      - ./bidder/.env
+    environment:
+      DOMAIN: ${DOMAIN}
+      PRIVATE_KEY_BIDDER: ${PRIVATE_KEY_BIDDER}
+      AUTO_DEPOSIT_VALUE: ${AUTO_DEPOSIT_VALUE}
+    networks:
+      - app-network
+    ports:
+      - "13524:13524" 
+      - "13523:13523"
+
+  datadog-agent:
+    image: datadog/agent:latest
+    container_name: datadog-agent
+    environment:
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_TAGS=env:bidder-bot
+      - DD_SITE=datadoghq.com
+      - DD_LOGS_ENABLED=true
+      - DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL=true
+      - DD_CONTAINER_EXCLUDE=image:datadog/agent:*
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup/:/host/sys/fs/cgroup:ro
+    depends_on:
+      - bot 
+      - mev-commit-bidder
+    networks:
+      - app-network 
+
 networks:
   app-network:
