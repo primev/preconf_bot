@@ -29,6 +29,6 @@ VERSION=0.8.0                              # mev-commit version, for logging pur
 
 ## Ensure Bidder Node is Running
 
-If running the `bot` directly on your machine, ensure a mev-commit bidder node is running and the autodeposit function deposited ETH into the bidder window. A quickstart to run a bidder node can be found [here](https://docs.primev.xyz/get-started/quickstart).
+If running the `bot` directly on your machine, ensure a mev-commit bidder node is running and the autodeposit function deposited ETH into the bidder window. A quickstart to run a bidder node can be found [here](https://docs.primev.xyz/v1.0.0/get-started/quickstart).
 
 Otherwise, by using the docker compose setup, the bidder node will be started automatically.
