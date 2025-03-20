@@ -46,17 +46,3 @@ jobs:
 
       - name: Run tests
         run: go test ./... -v
-
-      - name: Build Docker image
-        run: docker build -t your-docker-username/your-image-name:ci-${{ github.sha }} .
-
-      - name: Save Docker image as artifact
-        run: |
-          docker save your-docker-username/your-image-name:ci-${{ github.sha }} -o docker-image.tar
-        # Note: Alternatively, you can skip saving the image if not needed
-
-      - name: Upload Docker image artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: docker-image
-          path: docker-image.tar
