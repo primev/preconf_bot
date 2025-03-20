@@ -1,4 +1,3 @@
-version: '3'
 services:
   preconf_bot:
     build: 
@@ -21,4 +20,3 @@ services:
       - PRIORITY_FEE=${PRIORITY_FEE}
 networks:
   app-network:
-    external: true
