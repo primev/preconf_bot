@@ -6,11 +6,15 @@ services:
       DOMAIN: ${DOMAIN}
       AUTO_DEPOSIT_VALUE: ${AUTO_DEPOSIT_VALUE}
       KEYSTORE_PASSWORD: ${KEYSTORE_PASSWORD}
+      MEV_COMMIT_VALIDATOR_ROUTER_ADDR: ${VALIDATOR_OPT_IN_ROUTER_ADDRESS}
+      MEV_COMMIT_BEACON_API_URL: ${MEV_COMMIT_BEACON_API_URL}
+      MEV_COMMIT_L1_RPC_URL: ${MEV_COMMIT_L1_RPC_URL}
     networks:
       - app-network
     ports:
-      - "13524:13524" 
-      - "13523:13523"
+      - "13522:13522" # p2p
+      - "13523:13523" # http
+      - "13524:13524" # rpc
     volumes:
       - ${KEYSTORE_PATH}:/keystore
 
