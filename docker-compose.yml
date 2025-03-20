@@ -5,7 +5,6 @@ services:
     environment:
       DOMAIN: ${DOMAIN}
       AUTO_DEPOSIT_VALUE: ${AUTO_DEPOSIT_VALUE}
-      KEYSTORE_PATH: ${KEYSTORE_PATH}
       KEYSTORE_PASSWORD: ${KEYSTORE_PASSWORD}
     networks:
       - app-network

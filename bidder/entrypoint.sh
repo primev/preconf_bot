@@ -5,7 +5,7 @@ set -e
 MEV_COMMIT_VERSION="${MEV_COMMIT_VERSION:-v1.1.0-rc1}"
 DOMAIN="${DOMAIN:-testnet.mev-commit.xyz}"
 AUTO_DEPOSIT_VALUE="${AUTO_DEPOSIT_VALUE:-300000000000000000}"
-KEYSTORE_PATH="${KEYSTORE_PATH:-/keystore}"
+KEYSTORE_PATH="./keystore"
 ARTIFACTS_BASE_URL="https://github.com/primev/mev-commit/releases/download"
 RPC_URL="${RPC_URL:-https://chainrpc.${DOMAIN}}"
 LOG_LEVEL="${LOG_LEVEL:-info}"
@@ -34,8 +34,6 @@ sudo mv "${TEMP_DIR}/mev-commit" "${BINARY_PATH}"
 sudo chmod +x "${BINARY_PATH}"
 
 rm -rf "${TEMP_DIR}"
-
-mkdir -p "${KEYSTORE_PATH}"
 
 BOOTNODE="/dnsaddr/bootnode.${DOMAIN}"
 CONTRACTS_URL="https://contracts.${DOMAIN}"
