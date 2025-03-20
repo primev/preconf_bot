@@ -22,8 +22,6 @@ services:
   mev-commit-bidder:
     build: 
       context: ./bidder
-    env_file:
-      - ./bidder/.env
     environment:
       DOMAIN: ${DOMAIN}
       PRIVATE_KEY_BIDDER: ${PRIVATE_KEY_BIDDER}
