@@ -1,4 +1,20 @@
 services:
+  mev-commit-bidder:
+    build: 
+      context: ./bidder
+    environment:
+      DOMAIN: ${DOMAIN}
+      AUTO_DEPOSIT_VALUE: ${AUTO_DEPOSIT_VALUE}
+      KEYSTORE_PATH: ${KEYSTORE_PATH}
+      KEYSTORE_PASSWORD: ${KEYSTORE_PASSWORD}
+    networks:
+      - app-network
+    ports:
+      - "13524:13524" 
+      - "13523:13523"
+    volumes:
+      - ${KEYSTORE_PATH}:/keystore
+
   bot:
     build: 
       context: ./bot
@@ -18,21 +34,6 @@ services:
       - BID_AMOUNT_STD_DEV_PERCENTAGE=${BID_AMOUNT_STD_DEV_PERCENTAGE}
       - DEFAULT_TIMEOUT=${DEFAULT_TIMEOUT}
       - PRIORITY_FEE=${PRIORITY_FEE}
-
-  mev-commit-bidder:
-    build: 
-      context: ./bidder
-    env_file:
-      - ./bidder/.env
-    environment:
-      DOMAIN: ${DOMAIN}
-      PRIVATE_KEY_BIDDER: ${PRIVATE_KEY_BIDDER}
-      AUTO_DEPOSIT_VALUE: ${AUTO_DEPOSIT_VALUE}
-    networks:
-      - app-network
-    ports:
-      - "13524:13524" 
-      - "13523:13523"
 
   datadog-agent:
     image: datadog/agent:latest
