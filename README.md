@@ -1,6 +1,6 @@
 ## About
 
-A mev-commit bidder client service that integrates with a separate bidder node in a single docker compose setup. `bot` houses bidder client logic while `bidder` houses setup to run a bidder node from https://github.com/primev/mev-commit.
+A mev-commit bidder bot that integrates with a separate bidder node in a single docker compose setup. `bot` houses bidder client logic while `bidder` houses setup to run a bidder node from https://github.com/primev/mev-commit.
 
 ## Requirements
 
