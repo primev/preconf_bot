@@ -4,7 +4,6 @@ services:
       context: ./bidder
     environment:
       DOMAIN: ${DOMAIN}
-      AUTO_DEPOSIT_VALUE: ${AUTO_DEPOSIT_VALUE}
       KEYSTORE_PASSWORD: ${KEYSTORE_PASSWORD}
       MEV_COMMIT_VALIDATOR_ROUTER_ADDR: ${VALIDATOR_OPT_IN_ROUTER_ADDRESS}
       MEV_COMMIT_BEACON_API_URL: ${MEV_COMMIT_BEACON_API_URL}
@@ -19,27 +18,32 @@ services:
       - "13523:13523" # http
       - "13524:13524" # rpc
     volumes:
-      - ${KEYSTORE_PATH}:/keystore
+      - ${KEYSTORE_DIR}:/keystore
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/13524' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   bot:
     build: 
-      context: ./bot
+      context: ./bot2
     networks:
       - app-network
-    env_file:
-      - ./bot/.env
     environment:
-      - PRIVATE_KEY=${PRIVATE_KEY}
-      - RPC_ENDPOINT=${RPC_ENDPOINT}
-      - WS_ENDPOINT=${WS_ENDPOINT}
-      - USE_PAYLOAD=${USE_PAYLOAD:-true}
-      - SERVER_ADDRESS=${SERVER_ADDRESS}
-      - OFFSET=${OFFSET}
-      - NUM_BLOB=${NUM_BLOB}
-      - BID_AMOUNT=${BID_AMOUNT}
-      - BID_AMOUNT_STD_DEV_PERCENTAGE=${BID_AMOUNT_STD_DEV_PERCENTAGE}
-      - DEFAULT_TIMEOUT=${DEFAULT_TIMEOUT}
-      - PRIORITY_FEE=${PRIORITY_FEE}
+      - AUTO_DEPOSIT_AMOUNT=${AUTO_DEPOSIT_AMOUNT}
+      - L1_RPC_URLS=${L1_RPC_URLS}
+      - SETTLEMENT_RPC_URL=${SETTLEMENT_RPC_URL}
+      - BIDDER_NODE_RPC_URL=mev-commit-bidder:13524
+      - KEYSTORE_DIR=/keystore
+      - KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}
+      - LOG_LEVEL=${LOG_LEVEL}
+    depends_on:
+      mev-commit-bidder:
+        condition: service_healthy
+    volumes:
+      - ${KEYSTORE_DIR}:/keystore
 
   datadog-agent:
     image: datadog/agent:latest
@@ -64,4 +68,3 @@ services:
 networks:
   app-network:
     driver: bridge
-
