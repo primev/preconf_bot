@@ -11,6 +11,7 @@ services:
       MEV_COMMIT_L1_RPC_URL: ${MEV_COMMIT_L1_RPC_URL}
       MEV_COMMIT_NAT_ADDR: ${PUBLIC_IP}
       LOG_LEVEL: ${LOG_LEVEL}
+      MEV_COMMIT_VERSION: ${MEV_COMMIT_VERSION}
     networks:
       - app-network
     ports:
