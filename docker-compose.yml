@@ -10,6 +10,7 @@ services:
       MEV_COMMIT_BEACON_API_URL: ${MEV_COMMIT_BEACON_API_URL}
       MEV_COMMIT_L1_RPC_URL: ${MEV_COMMIT_L1_RPC_URL}
       MEV_COMMIT_NAT_ADDR: ${PUBLIC_IP}
+      LOG_LEVEL: ${LOG_LEVEL}
     networks:
       - app-network
     ports:

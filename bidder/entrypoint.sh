@@ -59,6 +59,4 @@ exec "${BINARY_PATH}" --peer-type "bidder" \
   --bidder-registry-contract "${BIDDER_REGISTRY_ADDR}" \
   --provider-registry-contract "${PROVIDER_REGISTRY_ADDR}" \
   --block-tracker-contract "${BLOCK_TRACKER_ADDR}" \
-  --preconf-contract "${PRECONF_ADDR}" \
-  --autodeposit-enabled true \
-  --autodeposit-value "${AUTO_DEPOSIT_VALUE}"
+  --preconf-contract "${PRECONF_ADDR}"
