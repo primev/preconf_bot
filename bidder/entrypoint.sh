@@ -5,7 +5,7 @@ set -e
 MEV_COMMIT_VERSION="${MEV_COMMIT_VERSION:-v1.1.0-rc1}"
 DOMAIN="${DOMAIN:-testnet.mev-commit.xyz}"
 AUTO_DEPOSIT_VALUE="${AUTO_DEPOSIT_VALUE:-300000000000000000}"
-KEYSTORE_PATH="./keystore"
+KEYSTORE_DIR="./keystore"
 ARTIFACTS_BASE_URL="https://github.com/primev/mev-commit/releases/download"
 RPC_URL="${RPC_URL:-https://chainrpc.${DOMAIN}}"
 LOG_LEVEL="${LOG_LEVEL:-info}"
@@ -54,7 +54,7 @@ exec "${BINARY_PATH}" --peer-type "bidder" \
   --log-fmt "json" \
   --log-level "${LOG_LEVEL}" \
   --bootnodes "${BOOTNODE}" \
-  --keystore-path "${KEYSTORE_PATH}" \
+  --keystore-path "${KEYSTORE_DIR}" \
   --keystore-password "${KEYSTORE_PASSWORD}" \
   --bidder-registry-contract "${BIDDER_REGISTRY_ADDR}" \
   --provider-registry-contract "${PROVIDER_REGISTRY_ADDR}" \

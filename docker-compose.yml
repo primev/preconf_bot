@@ -19,7 +19,7 @@ services:
       - "13523:13523" # http
       - "13524:13524" # rpc
     volumes:
-      - ${KEYSTORE_PATH}:/keystore
+      - ${KEYSTORE_DIR}:/keystore
 
   bot:
     build: 
