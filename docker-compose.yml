@@ -9,6 +9,7 @@ services:
       MEV_COMMIT_VALIDATOR_ROUTER_ADDR: ${VALIDATOR_OPT_IN_ROUTER_ADDRESS}
       MEV_COMMIT_BEACON_API_URL: ${MEV_COMMIT_BEACON_API_URL}
       MEV_COMMIT_L1_RPC_URL: ${MEV_COMMIT_L1_RPC_URL}
+      MEV_COMMIT_NAT_ADDR: ${PUBLIC_IP}
     networks:
       - app-network
     ports:
@@ -60,3 +61,5 @@ services:
 
 networks:
   app-network:
+    driver: bridge
+
