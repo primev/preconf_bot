@@ -38,6 +38,7 @@ services:
       - BIDDER_NODE_RPC_URL=mev-commit-bidder:13524
       - KEYSTORE_DIR=/keystore
       - KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}
+      - LOG_LEVEL=${LOG_LEVEL}
     depends_on:
       mev-commit-bidder:
         condition: service_healthy
