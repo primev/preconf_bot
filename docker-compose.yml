@@ -27,7 +27,7 @@ services:
 
   bot:
     build: 
-      context: ./bot2
+      context: ./bot
     networks:
       - app-network
     environment:
