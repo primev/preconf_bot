@@ -8,6 +8,7 @@ KEYSTORE_DIR="./keystore"
 ARTIFACTS_BASE_URL="https://github.com/primev/mev-commit/releases/download"
 RPC_URL="${RPC_URL:-https://chainrpc.${DOMAIN}}"
 LOG_LEVEL="${LOG_LEVEL:-info}"
+LOG_FMT="${LOG_FMT:-text}"
 
 BINARY_PATH="/usr/local/bin/mev-commit"
 
@@ -50,7 +51,7 @@ PRECONF_ADDR=$(echo "${contracts_json}" | jq -r '.PreConfCommitmentStore // .Pre
 
 exec "${BINARY_PATH}" --peer-type "bidder" \
   --settlement-rpc-endpoint "${RPC_URL}" \
-  --log-fmt "json" \
+  --log-fmt "${LOG_FMT}" \
   --log-level "${LOG_LEVEL}" \
   --bootnodes "${BOOTNODE}" \
   --keystore-path "${KEYSTORE_DIR}" \

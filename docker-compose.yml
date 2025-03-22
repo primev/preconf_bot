@@ -9,8 +9,8 @@ services:
       MEV_COMMIT_BEACON_API_URL: ${MEV_COMMIT_BEACON_API_URL}
       MEV_COMMIT_L1_RPC_URL: ${MEV_COMMIT_L1_RPC_URL}
       LOG_LEVEL: ${LOG_LEVEL}
+      LOG_FMT: ${LOG_FMT}
       MEV_COMMIT_VERSION: ${MEV_COMMIT_VERSION}
-      MEV_COMMIT_LOG_FMT: ${MEV_COMMIT_LOG_FMT}
     networks:
       - app-network
     ports:
