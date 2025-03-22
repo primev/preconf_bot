@@ -10,6 +10,7 @@ services:
       MEV_COMMIT_L1_RPC_URL: ${MEV_COMMIT_L1_RPC_URL}
       LOG_LEVEL: ${LOG_LEVEL}
       MEV_COMMIT_VERSION: ${MEV_COMMIT_VERSION}
+      MEV_COMMIT_LOG_FMT: ${MEV_COMMIT_LOG_FMT}
     networks:
       - app-network
     ports:
