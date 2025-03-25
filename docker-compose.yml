@@ -42,6 +42,7 @@ services:
       - KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}
       - BID_AMOUNT=${BID_AMOUNT}
       - LOG_LEVEL=${LOG_LEVEL}
+      - LOG_FMT=${LOG_FMT}
     depends_on:
       mev-commit-bidder:
         condition: service_healthy
