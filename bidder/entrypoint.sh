@@ -2,7 +2,7 @@
 
 set -e
 
-MEV_COMMIT_VERSION="${MEV_COMMIT_VERSION:-v1.1.0-rc1}"
+MEV_COMMIT_VERSION="${MEV_COMMIT_VERSION:-v1.1.0-rc2}"
 DOMAIN="${DOMAIN:-testnet.mev-commit.xyz}"
 KEYSTORE_DIR="./keystore"
 ARTIFACTS_BASE_URL="https://github.com/primev/mev-commit/releases/download"

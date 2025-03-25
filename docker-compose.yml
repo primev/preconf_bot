@@ -11,6 +11,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL}
       LOG_FMT: ${LOG_FMT}
       MEV_COMMIT_VERSION: ${MEV_COMMIT_VERSION}
+      MEV_COMMIT_PROPOSER_NOTIFY_OFFSET: ${MEV_COMMIT_PROPOSER_NOTIFY_OFFSET}
     networks:
       - app-network
     ports:
