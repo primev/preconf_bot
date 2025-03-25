@@ -1,16 +1,21 @@
 ## About
 
-A mev-commit bidder bot that integrates with a separate bidder node in a single docker compose setup. `bot` houses bidder client logic while `bidder` houses setup to run a bidder node from https://github.com/primev/mev-commit.
+A mev-commit bidder bot that integrates with a separate bidder node in a single docker compose setup.
 
 ## Requirements
+* Docker compose compatible machine
+* Keystore address funded on both L1 and the mev-commit chain (mainnet and holesky supported)
+* Various RPC endpoints etc. as specified below
 
-- funded L1 address
-- funded mev-commit address
-- Websocket endpoint (a publicly available one is set as default for Holesky, but cannot handle high throughput)
+## To run 
+
+`docker compose up -d --build` from the root directory with a properly populated .env file. See `env.example`. 
 
 ## `.env` variables
 
 ```
+DOMAIN                                      # "testnet.mev-commit.xyz" or "mev-commit.xyz"
+AUTO_DEPOSIT_AMOUNT=100000000000000000
 RPC_ENDPOINT=rpc_endpoint                   # RPC endpoint when use-payload is false (optional)
 WS_ENDPOINT=ws_endpoint                     # WebSocket endpoint for transactions (Default wss://ethereum-holesky-rpc.publicnode.com)
 PRIVATE_KEY=private_key                     # Private key for signing transactions
@@ -26,9 +31,3 @@ RUN_DURATION_MINUTES=0                      # Duration to run the bidder in minu
 APP_NAME=preconf_bidder                     # Application name, for logging purposes (Default preconf_bidder)
 VERSION=0.8.0                              # mev-commit version, for logging purposes (Default 0.8.0)
 ```
-
-## Ensure Bidder Node is Running
-
-If running the `bot` directly on your machine, ensure a mev-commit bidder node is running and the autodeposit function deposited ETH into the bidder window. A quickstart to run a bidder node can be found [here](https://docs.primev.xyz/v1.0.0/get-started/quickstart).
-
-Otherwise, by using the docker compose setup, the bidder node will be started automatically.
