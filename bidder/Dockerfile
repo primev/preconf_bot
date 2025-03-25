@@ -1,14 +1,32 @@
-FROM ubuntu:22.04
+FROM golang:1.23 AS builder
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    jq \
-    sudo \
-    ca-certificates \
-    tini \
-    && rm -rf /var/lib/apt/lists/*
+ARG BRANCH=v1.0-notif
 
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN apt-get update && \
+    apt-get install -y git make curl jq
 
-ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]
+WORKDIR /build
+
+RUN git clone https://github.com/primev/mev-commit.git . && \
+    git checkout ${BRANCH} && \
+    git -c submodule."external/geth".update=none submodule update --init --recursive
+
+WORKDIR /build/p2p
+
+RUN make build
+
+FROM golang:1.23
+
+RUN apt-get update && \
+    apt-get install -y curl jq && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/p2p/bin/mev-commit /usr/local/bin/mev-commit
+RUN chmod +x /usr/local/bin/mev-commit
+
+WORKDIR /app
+COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
+
+CMD ["./entrypoint.sh"]
