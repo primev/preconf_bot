@@ -3,7 +3,7 @@
 set -e
 
 DOMAIN="${DOMAIN:-testnet.mev-commit.xyz}"
-KEYSTORE_DIR="./keystore"
+KEYSTORE_DIR="/keystore"
 RPC_URL="${RPC_URL:-https://chainrpc.${DOMAIN}}"
 LOG_LEVEL="${LOG_LEVEL:-info}"
 LOG_FMT="${LOG_FMT:-text}"
