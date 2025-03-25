@@ -27,4 +27,5 @@ LOG_LEVEL                                   # Log level (Default info)
 LOG_FMT                                     # Log format (Default text)
 BID_AMOUNT                                  # Amount to bid in wei for each bid
 MEV_COMMIT_PROPOSER_NOTIFY_OFFSET           # Amount of time before an upcoming proposer's slot for the bidder node to notify the bot
+DD_API_KEY                                  # Datadog API key for the agent
 ```
