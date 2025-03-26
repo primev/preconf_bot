@@ -43,6 +43,8 @@ services:
       - BID_AMOUNT=${BID_AMOUNT}
       - LOG_LEVEL=${LOG_LEVEL}
       - LOG_FMT=${LOG_FMT}
+      - GAS_TIP_CAP=${L1_GAS_TIP_CAP}
+      - GAS_FEE_CAP=${L1_GAS_FEE_CAP}
     depends_on:
       mev-commit-bidder:
         condition: service_healthy
