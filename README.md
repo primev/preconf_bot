@@ -11,6 +11,36 @@ A mev-commit bidder bot that integrates with a separate bidder node in a single 
 
 `docker compose up -d --build` from the root directory with a properly populated .env file. See `env.example`. 
 
+## Cron job bidder health monitor
+
+Edit `PRECONF_BOT_DIR` in `bidder-health-monitor.sh` to the absolute path of the preconf_bot directory on your machine.
+
+Create log file:
+
+```bash
+sudo touch /var/log/bidder-health-monitor.log
+sudo chmod 644 /var/log/bidder-health-monitor.log
+```
+
+Copy `bidder-health-monitor.sh` to `/usr/local/bin/bidder-health-monitor.sh` and make it executable:
+
+```bash
+sudo cp bidder-health-monitor.sh /usr/local/bin/bidder-health-monitor.sh
+sudo chmod +x /usr/local/bin/bidder-health-monitor.sh
+```
+
+Add the following to root's crontab (edit with `sudo crontab -e`):
+
+```bash
+*/1 * * * * /usr/local/bin/bidder-health-monitor.sh >> /var/log/bidder-health-monitor.log 2>&1
+```
+
+This will check the bidder's health every 1 minute and restart it if unhealthy. Monitor the logs with:
+
+```bash
+tail -f /var/log/bidder-health-monitor.log
+```
+
 ## `.env` variables
 
 ```

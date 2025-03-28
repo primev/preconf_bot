@@ -21,11 +21,11 @@ services:
     volumes:
       - ${KEYSTORE_DIR}:/keystore
     healthcheck:
-      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/13524' || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
+      test: ["CMD-SHELL", "curl -s http://localhost:13523/v1/debug/topology | jq -e '.topology.connected_providers | length > 0'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   bot:
     build: 
