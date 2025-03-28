@@ -20,6 +20,7 @@ Create log file:
 ```bash
 sudo touch /var/log/bidder-health-monitor.log
 sudo chmod 644 /var/log/bidder-health-monitor.log
+sudo chown root:root /var/log/bidder-health-monitor.log
 ```
 
 Copy `bidder-health-monitor.sh` to `/usr/local/bin/bidder-health-monitor.sh` and make it executable:

@@ -41,4 +41,11 @@ if [ "$HEALTH" = "unhealthy" ]; then
     docker compose down
     docker compose up --build -d
     echo "Docker compose app restarted."
+
+elif [ "$HEALTH" = "healthy" ]; then
+    echo "Docker compose app is healthy."
+elif [ "$HEALTH" = "starting" ]; then
+    echo "Docker compose app is starting..."
+else
+    echo "Docker compose app is in an unknown state: $HEALTH"
 fi
