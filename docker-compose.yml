@@ -22,7 +22,7 @@ services:
       - ${KEYSTORE_DIR}:/keystore
     healthcheck:
       test: ["CMD-SHELL", "curl -s http://localhost:13523/v1/debug/topology | jq -e '.topology.connected_providers | length > 0'"]
-      interval: 30s
+      interval: 60s
       timeout: 10s
       retries: 3
       start_period: 30s

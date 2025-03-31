@@ -13,6 +13,16 @@ A mev-commit bidder bot that integrates with a separate bidder node in a single 
 
 ## Cron job bidder health monitor
 
+The following assumes the cron job will be run from the root user.
+
+Ensure docker compose is installed for the root user:
+
+```
+sudo docker compose version
+```
+
+Should return something like `Docker Compose version v2.24.7`.
+
 Edit `PRECONF_BOT_DIR` in `bidder-health-monitor.sh` to the absolute path of the preconf_bot directory on your machine.
 
 Create log file:
