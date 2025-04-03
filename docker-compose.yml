@@ -10,8 +10,8 @@ services:
       MEV_COMMIT_L1_RPC_URL: ${L1_RPC_URL}
       LOG_LEVEL: ${LOG_LEVEL}
       LOG_FMT: ${LOG_FMT}
+      MEV_COMMIT_VERSION: ${MEV_COMMIT_VERSION}
       MEV_COMMIT_PROPOSER_NOTIFY_OFFSET: ${MEV_COMMIT_PROPOSER_NOTIFY_OFFSET}
-      MEV_COMMIT_DATA_DIR: /data
     networks:
       - app-network
     ports:
@@ -20,7 +20,6 @@ services:
       - "13524:13524" # rpc
     volumes:
       - ${KEYSTORE_DIR}:/keystore
-      - mev_commit_data:/data
     healthcheck:
       test: ["CMD-SHELL", "curl -s http://localhost:13523/v1/debug/topology | jq -e '.topology.connected_providers | length > 0'"]
       interval: 60s
@@ -75,6 +74,3 @@ services:
 networks:
   app-network:
     driver: bridge
-
-volumes:
-  mev_commit_data:

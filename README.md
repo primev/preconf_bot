@@ -63,6 +63,7 @@ VALIDATOR_OPT_IN_ROUTER_ADDRESS             # Validator opt-in router address (0
 BEACON_API_URL                              # Beacon chain rpc url used by bidder bot and bidder node
 L1_RPC_URL                                  # L1 RPC URL
 SETTLEMENT_RPC_URL                          # RPC URL for the mev-commit chain (https://chainrpc.mev-commit.xyz/ or https://chainrpc.testnet.mev-commit.xyz/)
+MEV_COMMIT_VERSION                          # Tagged release of mev-commit to use for the bidder node
 LOG_LEVEL                                   # Log level (Default info)
 LOG_FMT                                     # Log format (Default text)
 BID_AMOUNT                                  # Amount to bid in wei for each bid
