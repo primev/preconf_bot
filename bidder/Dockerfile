@@ -1,6 +1,6 @@
 FROM golang:1.23 AS builder
 
-ARG TAG=v1.1.1
+ARG TAG=next-slot
 
 RUN apt-get update && \
     apt-get install -y git make curl jq

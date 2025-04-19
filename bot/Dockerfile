@@ -4,7 +4,6 @@ RUN apt-get update && apt-get install -y git
 
 RUN git clone https://github.com/primev/mev-commit.git /app && \
     cd /app && \
-    git checkout two-bidder-bot-types && \
     git -c submodule."external/geth".update=none submodule update --init --recursive
 
 WORKDIR /app/tools
