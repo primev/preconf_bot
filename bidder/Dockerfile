@@ -1,6 +1,7 @@
 FROM golang:1.23 AS builder
 
-ARG TAG=next-slot
+# Commit from main https://github.com/primev/mev-commit/commit/5bfb48c6612fd2ff32e0ddef6ffbc782ec4ccc86
+ARG COMMIT=5bfb48c6612fd2ff32e0ddef6ffbc782ec4ccc86
 
 RUN apt-get update && \
     apt-get install -y git make curl jq
@@ -8,7 +9,7 @@ RUN apt-get update && \
 WORKDIR /build
 
 RUN git clone https://github.com/primev/mev-commit.git . && \
-    git checkout ${TAG} && \
+    git checkout ${COMMIT} && \
     git -c submodule."external/geth".update=none submodule update --init --recursive
 
 WORKDIR /build/p2p
