@@ -3,8 +3,8 @@ FROM golang:1.23
 RUN apt-get update && apt-get install -y git
 
 RUN git clone https://github.com/primev/mev-commit.git /app && \
-    git checkout bidder-block-interval && \
     cd /app && \
+    git checkout bidder-block-interval && \
     git -c submodule."external/geth".update=none submodule update --init --recursive
 
 WORKDIR /app/tools
