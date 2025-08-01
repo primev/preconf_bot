@@ -33,4 +33,5 @@ exec "${BINARY_PATH}" --peer-type "bidder" \
   --bidder-registry-contract "${BIDDER_REGISTRY_ADDR}" \
   --provider-registry-contract "${PROVIDER_REGISTRY_ADDR}" \
   --block-tracker-contract "${BLOCK_TRACKER_ADDR}" \
-  --preconf-contract "${PRECONF_ADDR}"
+  --preconf-contract "${PRECONF_ADDR}" \
+  --provider-whitelist 0xB3998135372F1eE16Cb510af70ed212b5155Af62,0x2445e5e28890De3e93F39fCA817639c470F4d3b9
