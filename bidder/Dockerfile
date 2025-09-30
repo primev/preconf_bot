@@ -1,6 +1,6 @@
 FROM golang:1.23 AS builder
 
-ARG TAG=v1.1.6
+ARG TAG=v1.2.0-rc6
 
 RUN apt-get update && \
     apt-get install -y git make curl jq
