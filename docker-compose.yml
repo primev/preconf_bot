@@ -24,7 +24,7 @@ services:
       - ${KEYSTORE_DIR}:/keystore
       - mev_commit_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "[ \"$(curl -f -s http://localhost:13523/health)\" = \"ok\" ]"]
+      test: ["CMD-SHELL", "[ \"$(curl -f -s http://localhost:13523/health | tr -d '\\r\\n')\" = \"ok\" ]"]
       interval: 60s
       timeout: 10s
       retries: 3
