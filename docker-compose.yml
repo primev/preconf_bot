@@ -13,6 +13,7 @@ services:
       MEV_COMMIT_VERSION: ${MEV_COMMIT_VERSION}
       MEV_COMMIT_PROPOSER_NOTIFY_OFFSET: ${MEV_COMMIT_PROPOSER_NOTIFY_OFFSET}
       MEV_COMMIT_DATA_DIR: /data
+      RPC_URL: ${SETTLEMENT_RPC_URL}
     networks:
       - app-network
     ports:
