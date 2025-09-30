@@ -9,7 +9,7 @@ LOG_LEVEL="${LOG_LEVEL:-info}"
 LOG_FMT="${LOG_FMT:-text}"
 BINARY_PATH="/usr/local/bin/mev-commit"
 
-BOOTNODE="/dnsaddr/bootnode.${DOMAIN}"
+BOOTNODE="/dnsaddr/bootnode-v2.${DOMAIN}"
 
 exec "${BINARY_PATH}" --peer-type "bidder" \
   --settlement-rpc-endpoint "${RPC_URL}" \
