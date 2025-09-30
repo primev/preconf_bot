@@ -24,7 +24,7 @@ services:
       - ${KEYSTORE_DIR}:/keystore
       - mev_commit_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:13523/v1/debug/topology | jq -e '.topology.connected_providers | length > 0'"]
+      test: ["CMD-SHELL", "[ \"$(curl -f -s http://localhost:13523/health)\" = \"ok\" ]"]
       interval: 60s
       timeout: 10s
       retries: 3
